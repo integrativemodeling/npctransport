@@ -6,7 +6,7 @@
 #
 # Author: Barak Raveh barak@salilab.org
 # Data written: Aug 16, 2016
-# Date last udpated: Aug 22, 2016 or later
+# Date last udpated: Mar 3, 2018 or later
 #########################################
 from __future__ import print_function
 from IMP.npctransport import *
@@ -19,14 +19,15 @@ import math
 import re
 import sys
 import pandas as pd
+import argparse
 from collections import OrderedDict
 from collections import defaultdict
 from FGParamsFactory import *
 
 
 IS_REMOVE_GLE1_AND_NUP42=True
-outfile = sys.argv[1]
-input_rmf = sys.argv[2] #'wholeNPC_0.rmf3')
+#outfile = sys.argv[1]
+#input_rmf = sys.argv[2] #'wholeNPC_0.rmf3')
 COARSE_GRAINED_OBSTACLES= True
 Z_TRANSFORM=0 #-75.5
 FG_BEADS_PER_RES=20 #10
@@ -43,6 +44,24 @@ kap_range=4.5
 sigma0_deg=45
 sigma1_deg=45
 kap_interaction_sites=4
+
+def parse_commandline():
+    parser = argparse.ArgumentParser(description='Create a config file loaded from an RMF model of the full NPC')
+    parser.add_argument('config_file', metavar='config_file', type=str,
+                        default='config.pb',
+                        help='output configuration file')
+    parser.add_argument('input_rmf_file', metavar='input_rmf_file', type=str,
+                        default='config.pb',
+                        help='rmf file of NPC model (e.g., InputData/47-35_1spoke.rmf3)')
+    parser.add_argument('--diffuser_sizes', metavar='diffuser_sizes', type=int, nargs='*',
+                        default=range(14,29,2),
+                        help='list of diffuser sizes in A')
+    parser.add_argument('--n_diffusers', type=int,
+                        default=200,
+                        help='number of diffuser molecules for each type of diffuser')
+    args = parser.parse_args()
+    return args
+
 
 def get_node_nup_and_range_by_name(node_name, parent_name, grandparent_name):
     if parent_name=='Beads':
@@ -521,11 +540,14 @@ def get_basic_config():
 # *************************
 # ********* MAIN: *********
 # *************************
+args=parse_commandline()
+print(args)
+print(args.config_file, args.input_rmf_file)
 test_is_node_in_fg_domain() # just to test it works correctly
 config= get_basic_config()
 # Add FGs:
 fgs_regions_to_params= get_fgs_regions_to_params(IS_REMOVE_GLE1_AND_NUP42)
-add_obstacles_from_rmf(config, input_rmf, fgs_regions_to_params)
+add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
 #print("FGs to anchor keys", fgs_to_anchor_coords.keys())
 for (name,coords) in fgs_regions_to_params.iteritems(): # TODO: get coords right
     add_fgs(config,
@@ -550,17 +572,17 @@ for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
 # Add kaps and inerts:
 nonspecifics={}
 kaps={}
-rrange=range(14,30,2)
+rrange= args.diffuser_sizes
 for radius in rrange:
     inert_name="R%d" % radius
     nonspecifics[radius]= IMP.npctransport.add_float_type(config,
-                                                  number=200,
+                                                  number=args.n_diffusers,
                                                   radius=radius,
                                                   type_name=inert_name,
                                                   interactions=0)
     kap_name="kap%d" % radius
     kaps[radius]= IMP.npctransport.add_float_type(config,
-                                             number=200,
+                                             number=args.n_diffusers,
                                              radius=radius,
                                              type_name=kap_name,
                                              interactions=kap_interaction_sites)
@@ -584,6 +606,6 @@ for radius in rrange:
 
 
 # dump to file
-f=open(outfile, "wb")
+f=open(args.config_file, "wb")
 f.write(config.SerializeToString())
 print(config)
