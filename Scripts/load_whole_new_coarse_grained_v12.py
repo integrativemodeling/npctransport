@@ -59,6 +59,9 @@ def parse_commandline():
     parser.add_argument('--n_diffusers', type=int,
                         default=200,
                         help='number of diffuser molecules for each type of diffuser')
+    parser.add_argument('--box_size', type=float,
+                        default=2000,
+                        help='size of simulation box edge in ansgtroms')
     args = parser.parse_args()
     return args
 
@@ -501,7 +504,7 @@ def add_obstacles_from_rmf(config, input_rmf, fg_params):
                       coords,
                       radius*OBSTACLE_SCALE_FACTOR) # inflate obstacles a bit to prevent artificial holes
 
-def get_basic_config():
+def get_basic_config(cmdline_args):
     config = Configuration()
     IMP.npctransport.set_default_configuration(config)
     config.statistics_fraction.lower=1.0
@@ -529,7 +532,7 @@ def get_basic_config():
     config.dump_interval_ns=1000
     config.simulation_time_ns=1000
     config.box_is_on.lower=1
-    config.box_side.lower=2000
+    config.box_side.lower= cmdline_args.box_size
     config.slab_is_on.lower=1
     config.slab_thickness.lower=NUCLEAR_ENVELOPE_WIDTH
     config.tunnel_radius.lower=TUNNEL_RADIUS
@@ -544,7 +547,7 @@ args=parse_commandline()
 print(args)
 print(args.config_file, args.input_rmf_file)
 test_is_node_in_fg_domain() # just to test it works correctly
-config= get_basic_config()
+config= get_basic_config(args)
 # Add FGs:
 fgs_regions_to_params= get_fgs_regions_to_params(IS_REMOVE_GLE1_AND_NUP42)
 add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
