@@ -24,7 +24,7 @@ from collections import OrderedDict
 from collections import defaultdict
 from FGParamsFactory import *
 
-
+IS_TOROID= True
 IS_REMOVE_GLE1_AND_NUP42=True
 #outfile = sys.argv[1]
 #input_rmf = sys.argv[2] #'wholeNPC_0.rmf3')
@@ -36,8 +36,12 @@ FG_INTERACTIONS_PER_BEAD=1
 FG_REST_LENGTH_FACTOR=1.9*math.sqrt(20.0/FG_BEADS_PER_RES) # make sure that radius*rest_length scale with sqrt(# beads)
 obstacles={}
 fgs_to_anchor_coords={}
-TUNNEL_RADIUS=390 # 375 for cylinder; 390 from Nature 2018
-NUCLEAR_ENVELOPE_WIDTH=300 # 250 for cylinder; 150x2 from Nature 2018
+if IS_TOROID:
+    TUNNEL_RADIUS=540 # R=540 for toroid from Nature 2018 (not 390 as stated, 390 is R-r)
+    NUCLEAR_ENVELOPE_WIDTH= 300 # r=150 A, H=rx2, for toroid from Nature 2018
+else:
+    TUNNEL_RADIUS= 375
+    NUCLEAR_ENVELOPE_WIDTH= 250
 OBSTACLE_SCALE_FACTOR=1.0 # inflate obstacles a bit to prevent artificial cavities
 kap_k=4.75
 kap_range=4.5
@@ -64,6 +68,73 @@ def parse_commandline():
                         help='size of simulation box edge in ansgtroms')
     args = parser.parse_args()
     return args
+
+
+##
+def get_surface_distance_from_axis_aligned_ellipsoid(xyz, sphere_radius, origin, rv, rh):
+    '''
+    return the distance between the surface of specified sphere and
+    the surface of an axis aligned ellipsoid with vertical semi-axis rv and
+    horizontal semi-axis rh, centered at origin.
+
+    If the sphere penetrates the ellipsoid by some distance d, returns -d.
+    '''
+    EPS=0.000001
+    v= xyz-origin
+    dXY2= v[0]**2+v[1]**2
+    dZ2 = v[2]**2
+    #    theta = atan(dXY/(dZ+EPS))
+    dv2= dXY2 + dZ2 + EPS
+    sinTheta2=dXY2/dv2
+    cosTheta2=dZ2/dv2
+    cur_r = math.sqrt(rv**2*cosTheta2 + rh**2*sinTheta2)
+    dv=math.sqrt(dv2)
+    return dv-cur_r-sphere_radius
+
+#
+def is_outside_slab_with_toroidal_pore(xyz, sphere_radius, R, r, allowed_overlap_A=0.0):
+    '''
+    verify that sphere (xyz, sphere_radius) is out of a slab (think
+    membrane) with thickness 2xr, and toroidal pore with major radius
+    R and minor radius r, whose central axis is along (0,0,z)
+
+    xyz, spehre_radius - sphere coords
+    R - major toroid radius
+    allowed_overlap_A - penetration allowed that would still result in True. Use negatqive value for a conservative answer that requires additional slack between spheres and slab surface to be considered outside.
+    '''
+    EPS=0.000001
+    if xyz[2] - sphere_radius + allowed_overlap_A > r: # above slab
+        return True
+    if xyz[2] + sphere_radius - allowed_overlap_A < -r: # below slab
+        return True
+    # In slab vertically (but still might be in pore = outside slab):
+    xy0= IMP.algebra.Vector3D(xyz[0], xyz[1], 0.0)
+    rxy0= xy0.get_magnitude()
+    if rxy0 + sphere_radius > R:
+        return False # in slab outside external radius
+    if(rxy0>EPS):
+        xy0_major= xy0 * ( R / rxy0 ) # xy0_major is a vector of magnitude R in the same direction as xy0
+    else:
+        xy0_major=IMP.algebra.Vector3D(0, R, 0.0)
+    distance = get_surface_distance_from_axis_aligned_ellipsoid \
+               (xyz, sphere_radius, xy0_major, r, r)
+    return distance + allowed_overlap_A > 0
+
+def is_outside_slab_with_cylindrical_pore(xyz, sphere_radius,
+                                          R, r, allowed_overlap_A):
+    '''
+    Similar to is_outside_slab_with_toroidal_pore but for a cylinder of radius R
+    in a slab of height r*2, whose central axis is along (0,0,z)
+
+    xyz, spehre_radius - sphere coords
+    R - cylinder radius
+    r - half of slab thickness (along Z)
+    allowed_overlap_A - penetration allowed that would still result in True. Use negat
+    '''
+    distance_xy=math.sqrt(xyz[0]**2 + xyz[1]**2)
+    in_pore_interior= distance_xy - sphere_radius - allowed_overlap_A <= R
+    outside_slab= abs(xyz[2]) + radius + allowed_overlap_A > r
+    return outside_slab or in_pore_interior
 
 
 def get_node_nup_and_range_by_name(node_name, parent_name, grandparent_name):
@@ -371,10 +442,12 @@ def handle_xyz_children(config, parent, fg_params):
                                                              i*math.pi/4.0)
 #            print parent.get_parent().get_name(), parent.get_name(), child_name,
             coords_i=R*coords
-            distance=math.sqrt(coords_i[0]**2+coords_i[1]**2)
-            if(distance-radius>TUNNEL_RADIUS and
-                    abs(coords_i[2])+radius < 0.5*NUCLEAR_ENVELOPE_WIDTH): # Filter
-                continue
+            R= TUNNEL_RADIUS
+            r= 0.5*NUCLEAR_ENVELOPE_WIDTH
+            # Filter if overlaps envelope
+            if (IS_TOROID and not is_outside_slab_with_toroidal_pore(coords_i, radius, R, r)) or \
+               (not IS_TOROID and not is_outside_slab_with_cylindrical_pore(coords_i, radius, R, r)):
+                    continue
 #            print i, coords_i, radius, distance,
             if is_anchor_node(child, fg_params):
 #                print("Anchor bead found", child_name)
@@ -533,7 +606,10 @@ def get_basic_config(cmdline_args):
     config.simulation_time_ns=1000
     config.box_is_on.lower=1
     config.box_side.lower= cmdline_args.box_size
-    config.slab_is_on.lower=2 # 1 - cylindrical; 2 - toroidal
+    if IS_TOROID:
+        config.slab_is_on.lower=2
+    else:
+        config.slab_is_on.lower=1 # cylinder
     config.slab_thickness.lower=NUCLEAR_ENVELOPE_WIDTH
     config.tunnel_radius.lower=TUNNEL_RADIUS
     config.is_xyz_hist_stats=1
