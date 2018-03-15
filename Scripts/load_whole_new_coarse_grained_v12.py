@@ -30,10 +30,10 @@ IS_REMOVE_GLE1_AND_NUP42=True
 #input_rmf = sys.argv[2] #'wholeNPC_0.rmf3')
 COARSE_GRAINED_OBSTACLES= True
 Z_TRANSFORM=0 #-75.5
-FG_BEADS_PER_RES=20 #10
-FG_RADIUS_PER_BEAD=8.0*(FG_BEADS_PER_RES/20.0) #6
+FG_RES_PER_BEAD=20 #10
+FG_RADIUS_PER_BEAD=8.0*(FG_RES_PER_BEAD/20.0) #6
 FG_INTERACTIONS_PER_BEAD=1
-FG_REST_LENGTH_FACTOR=1.9*math.sqrt(20.0/FG_BEADS_PER_RES) # make sure that radius*rest_length scale with sqrt(# beads)
+FG_REST_LENGTH_FACTOR=1.9*math.sqrt(20.0/FG_RES_PER_BEAD) # make sure that radius*rest_length scale with sqrt(# beads)
 obstacles={}
 fgs_to_anchor_coords={}
 if IS_TOROID:
@@ -57,27 +57,38 @@ def parse_commandline():
     parser.add_argument('input_rmf_file', metavar='input_rmf_file', type=str,
                         default='config.pb',
                         help='rmf file of NPC model (e.g., InputData/47-35_1spoke.rmf3)')
-    parser.add_argument('--diffuser_sizes', metavar='diffuser_sizes', type=int, nargs='*',
+    parser.add_argument('--diffusers_radii', metavar='diffuser_radius', type=int, nargs='*',
                         default=range(14,29,2),
-                        help='list of diffuser sizes in A')
+                        help='list of diffuser radii in A')
     parser.add_argument('--n_diffusers', type=int,
                         default=200,
                         help='number of diffuser molecules for each type of diffuser')
     parser.add_argument('--box_size', type=float,
                         default=2000,
                         help='size of simulation box edge in ansgtroms')
+    parser.add_argument('--only_nup', type=str,
+                        help='if specified, creates a box with only a single copy of given nup')
     args = parser.parse_args()
     return args
 
 
 ##
-def get_surface_distance_from_axis_aligned_ellipsoid(xyz, sphere_radius, origin, rv, rh):
+def get_surface_distance_from_axis_aligned_ellipsoid(xyz, sphere_radius,
+                                                     origin,
+                                                     rv, rh):
     '''
     return the distance between the surface of specified sphere and
     the surface of an axis aligned ellipsoid with vertical semi-axis rv and
     horizontal semi-axis rh, centered at origin.
 
+    Returns:
     If the sphere penetrates the ellipsoid by some distance d, returns -d.
+
+    xyz - center of sphere to be compared to ellipsoid
+    sphere_radius - radius of sphere to be compared to ellipsoid
+    origin - ellipsoid 3D origin
+    rv - vertical ellipsoid radius (z axis)
+    rh - horizontal ellipsoid radius (x and y axes)
     '''
     EPS=0.000001
     v= xyz-origin
@@ -92,7 +103,9 @@ def get_surface_distance_from_axis_aligned_ellipsoid(xyz, sphere_radius, origin,
     return dv-cur_r-sphere_radius
 
 #
-def is_outside_slab_with_toroidal_pore(xyz, sphere_radius, R, r, allowed_overlap_A=0.0):
+def is_outside_slab_with_toroidal_pore(xyz, sphere_radius,
+                                       R, r,
+                                       allowed_overlap_A=0.0):
     '''
     verify that sphere (xyz, sphere_radius) is out of a slab (think
     membrane) with thickness 2xr, and toroidal pore with major radius
@@ -396,24 +409,47 @@ def get_bead_suffixes_and_is_anchor(fg_regions_to_params, fg_beads_per_res):
             redundant_nres = total_nres_beads - total_nres
             region_nres= abs(fg_params.res_to - fg_params.res_from + 1)
             region_nres_to_add = region_nres - redundant_nres
-            nbeads = int(math.ceil((region_nres_to_add+0.0) / FG_BEADS_PER_RES))
+            nbeads = int(math.ceil((region_nres_to_add+0.0) / FG_RES_PER_BEAD))
             for i in range(nbeads):
                 bead_suffixes.append(region)
             total_nres= total_nres + region_nres
     return bead_suffixes, is_anchor
 
-def add_fgs(config, type_name, fg_params, anchor_coordinates):
+def add_fgs(config, type_name, fg_params,
+            apply_anchor= True,
+            anchor_coordinates= None):
+    ''' add fgs of type "type_name" to config, with length and subtypes names
+        of each bead set according to fg_params. Use global variable
+        FG_RES_PER_BEAD to decide number of residues per bead
+
+        config - protobuf config object to which fgs will be added
+        type_name - label of FGs type name
+        fg_params - a dictionary from type_name to an internal dictionary
+                    of subdomain suffixes (e.g. "C" for "Nsp1C" to FGParam objects,
+                    such that each FGParam object describes the residue range of the subdomains.
+                    For instance fg_params["Nsp1"]["C"] describes the subdomain "Nsp1C",
+                    between fg_params["Nsp1"]["C"].res_from and fg_params["Nsp1"]["C"].res_to
+        apply_anchor - if true, anchor the i'th FG chain to anchor_coordinates[i], using the
+                    bead fg_params[type_name]["anchor"], which must be at either chain terminal
+        anchor_coordinates - a list of anchor coordinates for each FG chain
+
+    '''
+    global FG_RES_PER_BEAD
     bead_suffixes, is_anchor \
-        = get_bead_suffixes_and_is_anchor(fg_params, FG_BEADS_PER_RES)
+        = get_bead_suffixes_and_is_anchor(fg_params, FG_RES_PER_BEAD)
     nbeads = len(bead_suffixes)
+    if apply_anchor:
+        number_fgs= len(anchor_coordinates)
+    else:
+        number_fgs= 1
     fgs= IMP.npctransport.add_fg_type(config,
                                       type_name= type_name,
                                       number_of_beads= nbeads,
-                                      number=len(anchor_coordinates),
+                                      number=number_fgs,
                                       radius=FG_RADIUS_PER_BEAD,
                                       interactions= FG_INTERACTIONS_PER_BEAD,
                                       rest_length_factor = FG_REST_LENGTH_FACTOR)
-    if 'anchor' in bead_suffixes:
+    if 'anchor' in bead_suffixes and apply_anchor:
         assert(bead_suffixes[0]=='anchor' and 'anchor' not in bead_suffixes[1:])
         for coordinates in anchor_coordinates:
 #            print(type_name, "Coords:", coordinates)
@@ -444,10 +480,6 @@ def handle_xyz_children(config, parent, fg_params):
             coords_i=R*coords
             R= TUNNEL_RADIUS
             r= 0.5*NUCLEAR_ENVELOPE_WIDTH
-            # Filter if overlaps envelope
-            if (IS_TOROID and not is_outside_slab_with_toroidal_pore(coords_i, radius, R, r)) or \
-               (not IS_TOROID and not is_outside_slab_with_cylindrical_pore(coords_i, radius, R, r)):
-                    continue
 #            print i, coords_i, radius, distance,
             if is_anchor_node(child, fg_params):
 #                print("Anchor bead found", child_name)
@@ -461,7 +493,15 @@ def handle_xyz_children(config, parent, fg_params):
                     print("# Removing obstacle node that is in fg_domain",
                           child.get_name(), parent.get_name())
                     continue
-#                print "Obstacle"
+                # print "Obstacle"
+                # Filter out obstacles that overlaps nuclear envelope
+                if (IS_TOROID and not is_outside_slab_with_toroidal_pore(coords_i, radius, R, r)) or \
+                   (not IS_TOROID and not is_outside_slab_with_cylindrical_pore(coords_i, radius, R, r)):
+#                    print("# Removing obstacle node that is in nuclear envelope",
+#                          child.get_name(), parent.get_name())
+                    continue
+#                print("# Adding obstacle node",
+#                      child.get_name(), parent.get_name())
                 if radius in obstacles:
                     obstacles[radius].append(coords_i)
                 else:
@@ -482,7 +522,7 @@ def handle_nup_node(config, nup_node, nup_name, fg_params):
         handle_xyz_children(config, nup_node, fg_params)
     if re.search("Res:1$", node_name): # TODO: what to do about res10 vs res1?
         # node is root of res1 - grandparents are individual residues
-#        print "Res:1", nup_name, ";", node_name
+#        print("Res:1", nup_name, ";", node_name)
         for res1_node in nup_node.get_children():
             handle_xyz_children(config, res1_node, fg_params)
 
@@ -615,10 +655,54 @@ def get_basic_config(cmdline_args):
     config.is_xyz_hist_stats=1
     return config
 
+def add_kaps_and_inerts(config,
+                        n_diffusers,
+                        diffusers_radii,
+                        kap_interaction_sites,
+                        fg_regions_to_params):
+    '''
+    For each radius in the list diffusers_radii, add
+    n_diffusers x kaps and n_diffusers x inerts to config,
+    with kap_interaction_sites per kap molecule, and using
+    fg_regions_to_params to add interactions with fgs
+    '''
+    nonspecifics={}
+    kaps={}
+    for radius in diffusers_radii:
+        inert_name="R%d" % radius
+        nonspecifics[radius]= IMP.npctransport.add_float_type(config,
+                                                              number=n_diffusers,
+                                                              radius=radius,
+                                                              type_name=inert_name,
+                                                              interactions=0)
+        kap_name="kap%d" % radius
+        kaps[radius]= IMP.npctransport.add_float_type(config,
+                                                      number=args.n_diffusers,
+                                                      radius=radius,
+                                                      type_name=kap_name,
+                                                      interactions=kap_interaction_sites)
+        # Add interactions:
+        for fg_name, regions_to_params in fgs_regions_to_params.iteritems():
+            for region, params in regions_to_params.iteritems():
+                IMP.npctransport.add_interaction(config,
+                                                 name0=fg_name + region,
+                                                 name1=inert_name,
+                                                 interaction_k=0,
+                                                 interaction_range=0)
+                IMP.npctransport.add_interaction(config,
+                                                 name0=fg_name + region,
+                                                 name1=kap_name,
+                                                 interaction_k= params.kap_k,
+                                                 interaction_range= params.kap_range,
+                                                 range_sigma0_deg= sigma0_deg,
+                                                 range_sigma1_deg= sigma1_deg)
+
+
 
 # *************************
 # ********* MAIN: *********
 # *************************
+IS_SCAFFOLD_AND_PORE= True
 args=parse_commandline()
 print(args)
 print(args.config_file, args.input_rmf_file)
@@ -626,13 +710,20 @@ test_is_node_in_fg_domain() # just to test it works correctly
 config= get_basic_config(args)
 # Add FGs:
 fgs_regions_to_params= get_fgs_regions_to_params(IS_REMOVE_GLE1_AND_NUP42)
-add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
+if(args.only_nup is not None):
+    fgs_regions_to_params= {args.only_nup : fgs_regions_to_params[args.only_nup]}# discard all other nups
+    fgs_to_anchor_coords= {args.only_nup : None }
+    config.slab_is_on.lower= 0
+    IS_SCAFFOLD_AND_PORE=False
+if IS_SCAFFOLD_AND_PORE:
+    add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
 #print("FGs to anchor keys", fgs_to_anchor_coords.keys())
 for (name,coords) in fgs_regions_to_params.iteritems(): # TODO: get coords right
     add_fgs(config,
             name,
             fgs_regions_to_params[name],
-            fgs_to_anchor_coords[name])
+            apply_anchor= IS_SCAFFOLD_AND_PORE,
+            anchor_coordinates= fgs_to_anchor_coords[name])
 # Add fg-fg interactions:
 for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
     for fg1, regions_to_params1 in fgs_regions_to_params.iteritems():
@@ -649,39 +740,12 @@ for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
                                                                    interaction_k= self_k,
                                                                    interaction_range= self_range)
 # Add kaps and inerts:
-nonspecifics={}
-kaps={}
-rrange= args.diffuser_sizes
-for radius in rrange:
-    inert_name="R%d" % radius
-    nonspecifics[radius]= IMP.npctransport.add_float_type(config,
-                                                  number=args.n_diffusers,
-                                                  radius=radius,
-                                                  type_name=inert_name,
-                                                  interactions=0)
-    kap_name="kap%d" % radius
-    kaps[radius]= IMP.npctransport.add_float_type(config,
-                                             number=args.n_diffusers,
-                                             radius=radius,
-                                             type_name=kap_name,
-                                             interactions=kap_interaction_sites)
-    # Add interactions:
-    for fg_name, regions_to_params in fgs_regions_to_params.iteritems():
-        for region, params in regions_to_params.iteritems():
-            IMP.npctransport.add_interaction(config,
-                                             name0=fg_name + region,
-                                             name1=inert_name,
-                                             interaction_k=0,
-                                             interaction_range=0)
-            IMP.npctransport.add_interaction(config,
-                                             name0=fg_name + region,
-                                             name1=kap_name,
-                                             interaction_k= params.kap_k,
-                                             interaction_range= params.kap_range,
-                                             range_sigma0_deg= sigma0_deg,
-                                             range_sigma1_deg= sigma1_deg)
-
-# Add obstacles
+if not args.only_nup:
+    add_kaps_and_inerts(config,
+                        args.n_diffusers,
+                        args.diffusers_radii,
+                        kap_interaction_sites,
+                        fg_regions_to_params)
 
 
 # dump to file
