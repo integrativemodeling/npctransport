@@ -50,7 +50,9 @@ sigma1_deg=45
 kap_interaction_sites=4
 
 def parse_commandline():
-    parser = argparse.ArgumentParser(description='Create a config file loaded from an RMF model of the full NPC')
+    parser = argparse.ArgumentParser \
+             ( description='Create a config file loaded from an RMF model of the full NPC',
+               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('config_file', metavar='config_file', type=str,
                         default='config.pb',
                         help='output configuration file')
@@ -233,14 +235,16 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     # TODO: adjust motif density in different nups, rg?
     fgs_regions_to_params={}
     nan= float('nan')
+    SCALE_SELF_K= 0.8 # not for GLFGs for now
+#    SCALE_SELF_K_GLFG= 0.96
     default_fgp=FGParamsFactory \
                  ( res_from=nan,
                    res_to= nan,
-                   self_k= 1.50,
+                   self_k= 1.50 * SCALE_SELF_K,
                    self_range= 6.00,
                    kap_k= 3.58,
                    kap_range= 4.95,
-                   nonspec_k= 0.07,
+                   nonspec_k= 0.01,
                    nonspec_range= 5.00,
                    backbone_k= 0.0075,
                    backbone_tau= 50 )
@@ -248,10 +252,10 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     default_disordered_fgp.kap_k= None
     default_disordered_fgp.kap_range= None
     default_FSFG= default_fgp.get_copy()
-    default_FSFG.self_k= 1.5
+    default_FSFG.self_k= 1.5 * SCALE_SELF_K
     default_FSFG.nonspec_k= 0.01
     default_GLFG= default_fgp.get_copy()
-    default_GLFG.self_k= 1.55
+    default_GLFG.self_k= 1.55 * SCALE_SELF_K
     default_GLFG.nonspec_k= 0.13
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
@@ -435,6 +439,8 @@ def add_fgs(config, type_name, fg_params,
 
     '''
     global FG_RES_PER_BEAD
+    assert(fg_params.backbone_k= config.backbone_k.lower)
+    assert(fg_params.backbone_tau= config.backbone_tau_ns.lower)
     bead_suffixes, is_anchor \
         = get_bead_suffixes_and_is_anchor(fg_params, FG_RES_PER_BEAD)
     nbeads = len(bead_suffixes)
@@ -668,13 +674,29 @@ def add_kaps_and_inerts(config,
     '''
     nonspecifics={}
     kaps={}
+    SPECIAL_HACK= True
     for radius in diffusers_radii:
-        inert_name="R%d" % radius
+        inert_name="inert%d" % radius
         nonspecifics[radius]= IMP.npctransport.add_float_type(config,
                                                               number=n_diffusers,
                                                               radius=radius,
                                                               type_name=inert_name,
                                                               interactions=0)
+        # TODO: for now, this is very ad hoc, and should be generalized
+        #       also, same binding sites for FGs and kaps, need to think how to handle
+        if radius>=80 and SPECIAL_HACK:
+            n_interactions= int(math.ceil(4*radius/80.0))
+            nonspecifics[radius].interactions.lower= n_interactions+1
+            kaps[40].number.lower= args.n_diffusers * n_interactions
+            interaction= IMP.npctransport.add_interaction \
+                          ( config,
+                            name0= "kap40",
+                            name1= inert_name,
+                            interaction_k= 10.0,
+                            interaction_range= 30.0)
+            interaction.active_sites0.append(0)
+            continue
+
         kap_name="kap%d" % radius
         kaps[radius]= IMP.npctransport.add_float_type(config,
                                                       number=args.n_diffusers,
@@ -684,18 +706,23 @@ def add_kaps_and_inerts(config,
         # Add interactions:
         for fg_name, regions_to_params in fgs_regions_to_params.iteritems():
             for region, params in regions_to_params.iteritems():
-                IMP.npctransport.add_interaction(config,
-                                                 name0=fg_name + region,
-                                                 name1=inert_name,
-                                                 interaction_k=0,
-                                                 interaction_range=0)
-                IMP.npctransport.add_interaction(config,
-                                                 name0=fg_name + region,
-                                                 name1=kap_name,
-                                                 interaction_k= params.kap_k,
-                                                 interaction_range= params.kap_range,
-                                                 range_sigma0_deg= sigma0_deg,
-                                                 range_sigma1_deg= sigma1_deg)
+                # IMP.npctransport.add_interaction(config, name0=fg_name
+                #                                  + region,
+                #                                  name1=inert_name,
+                #                                  interaction_k=0,
+                #                                  interaction_range=0)
+                interaction= IMP.npctransport.add_interaction \
+                             ( config,
+                               name0=fg_name + region,
+                               name1=kap_name,
+                               interaction_k= params.kap_k,
+                               interaction_range= params.kap_range,
+                               range_sigma0_deg= sigma0_deg,
+                               range_sigma1_deg= sigma1_deg)
+                interaction.nonspecific_k.lower= params.nonspec_k
+                if kap_name=="kap40" and SPECIAL_HACK:
+                    for site_id in range(1, kap_interaction_sites):
+                        interaction.active_sites1.append(site_id)
 
 
 
@@ -734,18 +761,20 @@ for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
                     continue
                 self_k = 0.5*(params0.self_k+params1.self_k)
                 self_range = 0.5*(params0.self_range+params1.self_range)
+                nonspec_k= 0.5*(params0.nonspec_k+params1.nonspec_k)
                 interactionFG_FG= IMP.npctransport.add_interaction(config,
                                                                    name0= fg0+region0,
                                                                    name1= fg1+region1,
                                                                    interaction_k= self_k,
                                                                    interaction_range= self_range)
+                interactionFG_FG.nonspecific_k.lower= nonspec_k
 # Add kaps and inerts:
 if not args.only_nup:
     add_kaps_and_inerts(config,
                         args.n_diffusers,
                         args.diffusers_radii,
                         kap_interaction_sites,
-                        fg_regions_to_params)
+                        fgs_regions_to_params)
 
 
 # dump to file
