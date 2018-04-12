@@ -235,12 +235,12 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     # TODO: adjust motif density in different nups, rg?
     fgs_regions_to_params={}
     nan= float('nan')
-    SCALE_SELF_K= 0.8 # not for GLFGs for now
+#    SCALE_SELF_K= 0.88 # not for GLFGs for now
 #    SCALE_SELF_K_GLFG= 0.96
     default_fgp=FGParamsFactory \
                  ( res_from=nan,
                    res_to= nan,
-                   self_k= 1.50 * SCALE_SELF_K,
+                   self_k= 1.25,
                    self_range= 6.00,
                    kap_k= 3.58,
                    kap_range= 4.95,
@@ -252,11 +252,11 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     default_disordered_fgp.kap_k= None
     default_disordered_fgp.kap_range= None
     default_FSFG= default_fgp.get_copy()
-    default_FSFG.self_k= 1.5 * SCALE_SELF_K
+    default_FSFG.self_k= 1.25
     default_FSFG.nonspec_k= 0.01
     default_GLFG= default_fgp.get_copy()
-    default_GLFG.self_k= 1.55 * SCALE_SELF_K
-    default_GLFG.nonspec_k= 0.13
+    default_GLFG.self_k= 1.38
+    default_GLFG.nonspec_k= 0.08
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
         'C': default_FSFG.get_copy(181, 550),
@@ -321,6 +321,13 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
         's': default_disordered_fgp.get_copy(301, 398),
         '': default_FSFG.get_copy(399, 539)
     }
+    fgs_regions_to_params['FSFG_generic']= {
+        '': default_FSFG.get_copy(1, 120),
+    }
+    fgs_regions_to_params['GLFG_generic']= {
+        '': default_GLFG.get_copy(1, 120),
+    }
+
     return fgs_regions_to_params
 
 
@@ -382,6 +389,7 @@ def get_fg_regions_to_params_ordered(fg_regions_to_params):
         if i>0:
             assert(fg_params.res_from == last_res_to+1)
         last_res_to= fg_params.res_to
+    IS_REVERSE= False
     if (IS_ANCHOR):
         IS_REVERSE = ordered_list[-1][0]=='anchor' and \
                      len(ordered_list)>1
@@ -435,14 +443,16 @@ def add_fgs(config, type_name, fg_params,
                     between fg_params["Nsp1"]["C"].res_from and fg_params["Nsp1"]["C"].res_to
         apply_anchor - if true, anchor the i'th FG chain to anchor_coordinates[i], using the
                     bead fg_params[type_name]["anchor"], which must be at either chain terminal
-        anchor_coordinates - a list of anchor coordinates for each FG chain
+        anchor_coordinates - a list of anchor coordinates for each FG chain (or None)
 
     '''
     global FG_RES_PER_BEAD
-    assert(fg_params.backbone_k= config.backbone_k.lower)
-    assert(fg_params.backbone_tau= config.backbone_tau_ns.lower)
     bead_suffixes, is_anchor \
         = get_bead_suffixes_and_is_anchor(fg_params, FG_RES_PER_BEAD)
+    for fg_param in fg_params.itervalues():
+        print(fg_param.backbone_k, config.backbone_k.lower)
+        assert(fg_param.backbone_k in [None,config.backbone_k.lower])
+        assert(fg_param.backbone_tau in [None, config.backbone_tau_ns.lower])
     nbeads = len(bead_suffixes)
     if apply_anchor:
         number_fgs= len(anchor_coordinates)
@@ -464,8 +474,6 @@ def add_fgs(config, type_name, fg_params,
             pos.y= coordinates[1]
             pos.z= coordinates[2] + Z_TRANSFORM
     fgs.type_suffix_list.extend(bead_suffixes)
-#    for bead_suffix in bead_suffixes:
-#        suffixes= fgs.type_suffix_list.append(bead_suffix)
     return fgs
 
 
@@ -719,7 +727,8 @@ def add_kaps_and_inerts(config,
                                interaction_range= params.kap_range,
                                range_sigma0_deg= sigma0_deg,
                                range_sigma1_deg= sigma1_deg)
-                interaction.nonspecific_k.lower= params.nonspec_k
+                if(params.nonspec_k is not None):
+                    interaction.nonspecific_k.lower= params.nonspec_k
                 if kap_name=="kap40" and SPECIAL_HACK:
                     for site_id in range(1, kap_interaction_sites):
                         interaction.active_sites1.append(site_id)
@@ -746,11 +755,16 @@ if IS_SCAFFOLD_AND_PORE:
     add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
 #print("FGs to anchor keys", fgs_to_anchor_coords.keys())
 for (name,coords) in fgs_regions_to_params.iteritems(): # TODO: get coords right
+    anchor_coordinates= None
+    apply_anchor= False
+    if name in fgs_to_anchor_coords and IS_SCAFFOLD_AND_PORE:
+        anchor_coordinates= fgs_to_anchor_coords[name]
+        apply_anchor= True
     add_fgs(config,
             name,
             fgs_regions_to_params[name],
-            apply_anchor= IS_SCAFFOLD_AND_PORE,
-            anchor_coordinates= fgs_to_anchor_coords[name])
+            apply_anchor= apply_anchor,
+            anchor_coordinates= anchor_coordinates)
 # Add fg-fg interactions:
 for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
     for fg1, regions_to_params1 in fgs_regions_to_params.iteritems():
@@ -761,12 +775,16 @@ for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
                     continue
                 self_k = 0.5*(params0.self_k+params1.self_k)
                 self_range = 0.5*(params0.self_range+params1.self_range)
-                nonspec_k= 0.5*(params0.nonspec_k+params1.nonspec_k)
                 interactionFG_FG= IMP.npctransport.add_interaction(config,
                                                                    name0= fg0+region0,
                                                                    name1= fg1+region1,
                                                                    interaction_k= self_k,
                                                                    interaction_range= self_range)
+                if(params0.nonspec_k is None or params1.nonspec_k is None):
+                    nonspec_k=0.01
+                else:
+                    nonspec_k= 0.5*(params0.nonspec_k+params1.nonspec_k)
+#                    nonspec_k= math.sqrt(params0.nonspec_k*params1.nonspec_k) # geometric mean
                 interactionFG_FG.nonspecific_k.lower= nonspec_k
 # Add kaps and inerts:
 if not args.only_nup:
