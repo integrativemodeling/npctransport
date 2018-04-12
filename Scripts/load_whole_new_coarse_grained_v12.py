@@ -693,9 +693,10 @@ def add_kaps_and_inerts(config,
         # TODO: for now, this is very ad hoc, and should be generalized
         #       also, same binding sites for FGs and kaps, need to think how to handle
         if radius>=80 and SPECIAL_HACK:
-            n_interactions= int(math.ceil(4*radius/80.0))
-            nonspecifics[radius].interactions.lower= n_interactions+1
-            kaps[40].number.lower= args.n_diffusers * n_interactions
+            n_interactions= int(math.ceil(4*radius/40.0))
+            nonspecifics[radius].interactions.lower= n_interactions
+            kaps[40].number.lower= args.n_diffusers * n_interaction
+            kaps[40].interactions.lower= kap[40].interactions.lower + 1
             interaction= IMP.npctransport.add_interaction \
                           ( config,
                             name0= "kap40",
