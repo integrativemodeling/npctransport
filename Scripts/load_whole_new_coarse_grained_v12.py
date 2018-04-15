@@ -693,10 +693,11 @@ def add_kaps_and_inerts(config,
         # TODO: for now, this is very ad hoc, and should be generalized
         #       also, same binding sites for FGs and kaps, need to think how to handle
         if radius>=80 and SPECIAL_HACK:
+            assert(40 in kaps)
             n_interactions= int(math.ceil(4*radius/40.0))
             nonspecifics[radius].interactions.lower= n_interactions
-            kaps[40].number.lower= args.n_diffusers * n_interaction
-            kaps[40].interactions.lower= kap[40].interactions.lower + 1
+            kaps[40].number.lower= args.n_diffusers * n_interactions
+            kaps[40].interactions.lower= kaps[40].interactions.lower + 1
             interaction= IMP.npctransport.add_interaction \
                           ( config,
                             name0= "kap40",
@@ -756,11 +757,13 @@ if IS_SCAFFOLD_AND_PORE:
     add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
 #print("FGs to anchor keys", fgs_to_anchor_coords.keys())
 for (name,coords) in fgs_regions_to_params.iteritems(): # TODO: get coords right
-    anchor_coordinates= None
-    apply_anchor= False
-    if name in fgs_to_anchor_coords and IS_SCAFFOLD_AND_PORE:
+    apply_anchor= IS_SCAFFOLD_AND_PORE
+    if apply_anchor:
+        if name not in fgs_to_anchor_coords:
+            continue
         anchor_coordinates= fgs_to_anchor_coords[name]
-        apply_anchor= True
+    else:
+        anchor_coordinates= None
     add_fgs(config,
             name,
             fgs_regions_to_params[name],
