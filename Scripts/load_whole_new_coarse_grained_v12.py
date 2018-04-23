@@ -9,6 +9,8 @@
 # Date last udpated: Mar 3, 2018 or later
 #########################################
 from __future__ import print_function
+from FGParamsFactory import *
+import my_util
 from IMP.npctransport import *
 import IMP.atom
 import IMP.core
@@ -22,7 +24,7 @@ import pandas as pd
 import argparse
 from collections import OrderedDict
 from collections import defaultdict
-from FGParamsFactory import *
+
 
 IS_TOROID= True
 IS_REMOVE_GLE1_AND_NUP42=True
@@ -732,7 +734,7 @@ def add_kaps_and_inerts(config,
                 if(params.nonspec_k is not None):
                     interaction.nonspecific_k.lower= params.nonspec_k
                 if kap_name=="kap40" and SPECIAL_HACK:
-                    for site_id in range(1, kap_interaction_sites):
+                    for site_id in range_inclusive(1, kap_interaction_sites):
                         interaction.active_sites1.append(site_id)
 
 
