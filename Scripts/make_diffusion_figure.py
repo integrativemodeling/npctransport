@@ -18,7 +18,12 @@ from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 from multiprocessing import cpu_count, Pool
 
+global_from_time_ns=0.0
+global_to_time_ns=100000000
+
 def get_diffuser_data_from_file(fname):
+    global global_from_time_ns
+    global global_to_time_ns
     f=open(sys.argv[1], "rb")
     config= Output()
     config.ParseFromString(f.read())
@@ -30,6 +35,10 @@ def get_diffuser_data_from_file(fname):
         y= []
         w= []
         for od in f.order_params:
+            if(od.time_ns<global_from_time_ns):
+                continue
+            if(od.time_ns>global_to_time_ns):
+                continue
             if is_first:
                 prev_time_ns= od.time_ns
                 is_first= False
@@ -118,6 +127,7 @@ pp= PdfPages('output.pdf')
 if len(sys.argv)<=1:
     print("Usage", sys.argv[0]," output_file_1 [output_file2] ...")
     sys.exit(-1)
+global_to_time_ns= 28500.0
 dd_all= get_diffuser_data_from_files(sys.argv[1:])
 unbound_d={}
 bound_d={}

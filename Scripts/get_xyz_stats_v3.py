@@ -9,6 +9,7 @@ import cPickle as pickle
 import RMF
 import gzip
 
+IS_SKIP_FGS=False
 N=1
 DISABLE_RANDOM=True or (N==1)
 
@@ -45,6 +46,7 @@ try:
         [ n, S, processed_fnames ] = pickle.load(f)
     assert(fnames.issuperset(processed_fnames))
     assert(n==N)
+    print("Using cache", CACHE_FNAME)
 except:
     print "NOT USING CACHE"
     S=[{} for i in range(N)]
@@ -54,17 +56,19 @@ fnames=fnames.difference(processed_fnames)
 for ifile, fname in enumerate(fnames):
     try:
         F= RMF.HDF5.open_file(fname)
-        G_fgs= F.get_child_group("fg_xyz_hist")
+        if not IS_SKIP_FGS:
+            G_fgs= F.get_child_group("fg_xyz_hist")
         G_floaters= F.get_child_group("floater_xyz_hist")
     except:
         print "Skipping ", fname, " due to error"
         continue
     print "Processing", fname
     datasets={}
-    n_fgs= G_fgs.get_number_of_children()
-    for j in range(n_fgs):
-        fg_type= G_fgs.get_child_name(j)
-        datasets[fg_type]= G_fgs.get_child_int_data_set_3d(fg_type)
+    if not IS_SKIP_FGS:
+        n_fgs= G_fgs.get_number_of_children()
+        for j in range(n_fgs):
+            fg_type= G_fgs.get_child_name(j)
+            datasets[fg_type]= G_fgs.get_child_int_data_set_3d(fg_type)
     n_floaters= G_floaters.get_number_of_children()
     for j in range(n_floaters):
         floater_type= G_floaters.get_child_name(j)
@@ -98,7 +102,3 @@ for ifile, fname in enumerate(fnames):
             pickle.dump([ N, S, processed_fnames], f)
 
 do_stats(N,S)
-print "UPDATING CACHE"
-#with gzip.GzipFile(CACHE_FNAME+'.gzip', 'wb') as f:
-with open(CACHE_FNAME,'wb') as f:
-    pickle.dump([ N, S, processed_fnames], f)
