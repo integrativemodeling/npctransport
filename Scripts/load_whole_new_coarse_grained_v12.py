@@ -694,15 +694,15 @@ def add_kaps_and_inerts(config,
                                                               interactions=0)
         # TODO: for now, this is very ad hoc, and should be generalized
         #       also, same binding sites for FGs and kaps, need to think how to handle
-        if radius>=80 and SPECIAL_HACK:
-            assert(40 in kaps)
+        if radius>=60 and SPECIAL_HACK:
+            assert(20 in kaps)
             n_interactions= int(math.ceil(4*radius/40.0))
             nonspecifics[radius].interactions.lower= n_interactions
-            kaps[40].number.lower= args.n_diffusers * n_interactions
-            kaps[40].interactions.lower= kaps[40].interactions.lower + 1
+            kaps[20].number.lower= kaps[20].number.lower + args.n_diffusers * n_interactions
+            kaps[20].interactions.lower= kaps[20].interactions.lower + 1
             interaction= IMP.npctransport.add_interaction \
                           ( config,
-                            name0= "kap40",
+                            name0= "kap20",
                             name1= inert_name,
                             interaction_k= 10.0,
                             interaction_range= 30.0)
@@ -733,8 +733,8 @@ def add_kaps_and_inerts(config,
                                range_sigma1_deg= sigma1_deg)
                 if(params.nonspec_k is not None):
                     interaction.nonspecific_k.lower= params.nonspec_k
-                if kap_name=="kap40" and SPECIAL_HACK:
-                    for site_id in range_inclusive(1, kap_interaction_sites):
+                if kap_name=="kap20" and SPECIAL_HACK:
+                    for site_id in my_util.range_inclusive(1, kap_interaction_sites):
                         interaction.active_sites1.append(site_id)
 
 
