@@ -694,7 +694,7 @@ def add_kaps_and_inerts(config,
                                                               interactions=0)
         # TODO: for now, this is very ad hoc, and should be generalized
         #       also, same binding sites for FGs and kaps, need to think how to handle
-        if radius>=60 and SPECIAL_HACK:
+        if radius>=50 and SPECIAL_HACK:
             assert(20 in kaps)
             n_interactions= int(math.ceil(5*radius/40.0))
             nonspecifics[radius].interactions.lower= n_interactions
