@@ -45,8 +45,8 @@ else:
     TUNNEL_RADIUS= 375
     NUCLEAR_ENVELOPE_WIDTH= 250
 OBSTACLE_SCALE_FACTOR=1.0 # inflate obstacles a bit to prevent artificial cavities
-kap_k=4.75
-kap_range=4.5
+#kap_k=4.75
+#kap_range=4.5
 sigma0_deg=45
 sigma1_deg=45
 kap_interaction_sites=4
@@ -244,8 +244,8 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
                    res_to= nan,
                    self_k= 1.28,
                    self_range= 6.00,
-                   kap_k= 3.58,
-                   kap_range= 4.95,
+                   kap_k= 5.00, # 3.58 originally
+                   kap_range= 5.5, # 4.95 originally
                    nonspec_k= 0.01,
                    nonspec_range= 5.00,
                    backbone_k= 0.0075,
@@ -644,7 +644,7 @@ def get_basic_config(cmdline_args):
     config.is_backbone_harmonic=1
     config.backbone_tau_ns.lower=50.0
     config.time_step_factor.lower=2
-    config.excluded_volume_k.lower=5
+    config.excluded_volume_k.lower=10 # Original 5
     # non-specific attraction
     config.nonspecific_range.lower= 5.0
     config.nonspecific_k.lower= 0.01
@@ -696,16 +696,17 @@ def add_kaps_and_inerts(config,
         #       also, same binding sites for FGs and kaps, need to think how to handle
         if radius>=60 and SPECIAL_HACK:
             assert(20 in kaps)
-            n_interactions= int(math.ceil(4*radius/40.0))
+            n_interactions= int(math.ceil(5*radius/40.0))
             nonspecifics[radius].interactions.lower= n_interactions
-            kaps[20].number.lower= kaps[20].number.lower + args.n_diffusers * n_interactions
+            kaps[20].number.lower= kaps[20].number.lower + args.n_diffusers * n_interactions * 2
             kaps[20].interactions.lower= kaps[20].interactions.lower + 1
             interaction= IMP.npctransport.add_interaction \
                           ( config,
                             name0= "kap20",
                             name1= inert_name,
                             interaction_k= 10.0,
-                            interaction_range= 30.0)
+                            interaction_range= 30.0,
+                          )
             interaction.active_sites0.append(0)
             continue
 
