@@ -72,7 +72,7 @@ if(len(sys.argv)>2):
 else:
   FGs= ["FSFG_generic", "GLFG_generic", "Nup1", "Nup100", "Nup49", "Nsp1"]
 for fg in FGs:
-  for Ns in my_util.range_inclusive(5,0,-1):
+  for Ns in my_util.range_inclusive(0,0,-1):
     try:
       handle_fg(fg, skip_n_rows, Ns=Ns)
       print ("Handled {}{} successfully".format(fg, Ns*'N'))

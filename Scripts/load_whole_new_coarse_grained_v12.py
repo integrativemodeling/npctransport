@@ -254,10 +254,10 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     default_disordered_fgp.kap_k= None
     default_disordered_fgp.kap_range= None
     default_FSFG= default_fgp.get_copy()
-    default_FSFG.self_k= 1.28
+    default_FSFG.self_k= 1.32
     default_FSFG.nonspec_k= 0.01
     default_GLFG= default_fgp.get_copy()
-    default_GLFG.self_k= 1.41
+    default_GLFG.self_k= 1.47
     default_GLFG.nonspec_k= 0.08
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
