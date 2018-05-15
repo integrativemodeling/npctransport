@@ -9,7 +9,8 @@ import cPickle as pickle
 import RMF
 import gzip
 
-IS_SKIP_FGS=False
+#IS_SKIP_FGS= False
+IS_SKIP_FGS= True
 N=1
 DISABLE_RANDOM=True or (N==1)
 

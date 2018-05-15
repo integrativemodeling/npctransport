@@ -72,6 +72,9 @@ def parse_commandline():
                         help='size of simulation box edge in ansgtroms')
     parser.add_argument('--only_nup', type=str,
                         help='if specified, creates a box with only a single copy of given nup')
+    parser.add_argument('--time_step_factor', type=float,
+                        help='factor to change time step from automatically computed one',
+                        default=2.0)
     args = parser.parse_args()
     return args
 
@@ -643,7 +646,7 @@ def get_basic_config(cmdline_args):
     config.backbone_k.lower=0.0075 #kcal/mol/A^2
     config.is_backbone_harmonic=1
     config.backbone_tau_ns.lower=50.0
-    config.time_step_factor.lower=2
+    config.time_step_factor.lower=cmdline_args.time_step_factor
     config.excluded_volume_k.lower=10 # Original 5
     # non-specific attraction
     config.nonspecific_range.lower= 5.0
