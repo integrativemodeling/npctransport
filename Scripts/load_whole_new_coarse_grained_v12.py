@@ -36,7 +36,7 @@ Z_TRANSFORM=0 #-75.5
 FG_RES_PER_BEAD=20 #10
 FG_RADIUS_PER_BEAD=8.0*(FG_RES_PER_BEAD/20.0) #6
 FG_INTERACTIONS_PER_BEAD=1
-FG_REST_LENGTH_FACTOR=1.9*math.sqrt(20.0/FG_RES_PER_BEAD) # make sure that radius*rest_length scale with sqrt(# beads)
+FG_REST_LENGTH_FACTOR=1.5*math.sqrt(20.0/FG_RES_PER_BEAD) # make sure that radius*rest_length scale with sqrt(# beads)
 obstacles={}
 fgs_to_anchor_coords={}
 if IS_TOROID:
@@ -255,23 +255,23 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     default_fgp=FGParamsFactory \
                  ( res_from=nan,
                    res_to= nan,
-                   self_k= 1.28,
+                   self_k= 1.11,
                    self_range= 6.00,
                    kap_k= 5.00, # 3.58 originally
                    kap_range= 5.5, # 4.95 originally
                    nonspec_k= 0.01,
                    nonspec_range= 5.00,
-                   backbone_k= 0.0075,
+                   backbone_k= 0.0075*2,
                    backbone_tau= 50 )
     default_disordered_fgp= default_fgp.get_copy()
     default_disordered_fgp.kap_k= None
     default_disordered_fgp.kap_range= None
     default_FSFG= default_fgp.get_copy()
-    default_FSFG.self_k= 1.32
+    default_FSFG.self_k= 1.15
     default_FSFG.nonspec_k= 0.01
     default_GLFG= default_fgp.get_copy()
-    default_GLFG.self_k= 1.47
-    default_GLFG.nonspec_k= 0.08
+    default_GLFG.self_k= 1.30
+    default_GLFG.nonspec_k= 0.06
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
         'C': default_FSFG.get_copy(181, 550),
@@ -715,7 +715,7 @@ def get_basic_config(cmdline_args):
     #config.dump_interval=1
     config.interaction_k.lower=10
     config.interaction_range.lower=10
-    config.backbone_k.lower=0.0075 #kcal/mol/A^2
+    config.backbone_k.lower=0.0075*2 #kcal/mol/A^2
     config.is_backbone_harmonic=1
     config.backbone_tau_ns.lower=50.0
     config.time_step_factor.lower=cmdline_args.time_step_factor
