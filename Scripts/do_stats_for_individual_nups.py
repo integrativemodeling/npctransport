@@ -29,36 +29,67 @@ def handle_fg(fg, skip_n_rows, Ns=0):
     output.ParseFromString(f.read())
     stats= output.statistics
     Rgs= []
+    Rgs_normalized= []
+    Rg2s= []
     e2es= []
+    e2es_normalized= []
+    e2e2s= []
+    bond_ds= []
+    bond_d2s= []
     assert(len(stats.fgs)==1)
     # Below, correcting Rg from coarse grain to compare directly to SAXS data,
     # using Rg_real^2 = Rg_CG^2 + 0.8*Rbead^2, where 0.8Rbead^2 is the formula
     # for a sphere's Rg
     for op in stats.fgs[0].order_params[skip_n_rows:]:
-      Rg_normalized= math.sqrt(op.mean_radius_of_gyration**2 + 0.8*Rbead**2)
-      Rgs.append(Rg_normalized)
-      e2e_normalized= op.mean_end_to_end_distance + Rbead
-      e2es.append(e2e_normalized)
-    Rg_mean, Rg_sem= stats_util.get_time_series_mean_and_sem(Rgs)
-    e2e_mean, e2e_sem= stats_util.get_time_series_mean_and_sem(e2es)
+      Rg= op.mean_radius_of_gyration
+      Rg_normalized= math.sqrt(Rg**2 + 0.8*Rbead**2)
+      Rg2= op.mean_square_radius_of_gyration
+      Rgs.append(Rg)
+      Rgs_normalized.append(Rg_normalized)
+      Rg2s.append(Rg2)
+      e2e= op.mean_end_to_end_distance
+      e2e_normalized= e2e + Rbead
+      e2e2= op.mean_square_end_to_end_distance
+      e2es.append(e2e)
+      e2es_normalized.append(e2e_normalized)
+      e2e2s.append(e2e2)
+      bond_d= op.mean_bond_distance
+      bond_d2= op.mean_square_bond_distance
+      bond_ds.append(bond_d)
+      bond_d2s.append(bond_d2)
+    Rg_mean, Rg_sem= stats_util.get_time_series_mean_and_sem(Rgs_normalized)
+    Rg_stddev= math.sqrt(np.mean(Rg2s) - np.mean(Rgs)**2)
+    e2e_mean, e2e_sem= stats_util.get_time_series_mean_and_sem(e2es_normalized)
+    e2e_stddev= math.sqrt(np.mean(e2e2s) - np.mean(e2es)**2)
+    bond_d_mean, bond_d_sem= stats_util.get_time_series_mean_and_sem(bond_ds)
+    bond_d_stddev= math.sqrt(np.mean(bond_d2s) - bond_d_mean**2)
+    # Rg:
     print("{} n_fgs={:d} n_res={:d} ".format(fg,n_fgs,n_fgs*20), end="\t")
     print("Rg  {mean:.2f} +- {conf95:.2f}\tstd-dev {stddev:.2f}\tn= {n}"\
-          .format(mean=Rg_mean, conf95=1.96*Rg_sem, stddev=np.std(Rgs), n=len(Rgs)),
+          .format(mean=Rg_mean, conf95=1.96*Rg_sem, stddev=Rg_stddev, n=len(Rgs)),
           end="\t")
     print("For nres=120 at Flory=0.5: {:.2f}".format(Rg_mean*(120/20.0/n_fgs)**0.5),
           end="\t")
     print("Flory=0.4: {:.2f}".format(Rg_mean*(120/20.0/n_fgs)**0.4),
           end="\t")
     print()
+    # End to end:
     print("{} n_fgs={:d} n_res={:d} ".format(fg,n_fgs,n_fgs*20), end="\t")
     print("e2e {mean:.2f} +- {conf95:.2f}\tstd-dev {stddev:.2f}\tn= {n}"\
-          .format(mean=e2e_mean, conf95=1.96*e2e_sem, stddev=np.std(e2es), n=len(e2es)),
+          .format(mean=e2e_mean, conf95=1.96*e2e_sem, stddev=e2e_stddev, n=len(e2es)),
           end="\t")
     print("For nres=120 at Flory=0.5: {:.2f}".format(e2e_mean*(120/20.0/n_fgs)**0.5),
           end="\t")
     print("Flory=0.4: {:.2f}".format(e2e_mean*(120/20.0/n_fgs)**0.4),
           end="\t")
     print()
+    # Bond length:
+    print("{} n_fgs={:d} n_res={:d} ".format(fg,n_fgs,n_fgs*20), end="\t")
+    print("bond-length  {mean:.2f} +- {conf95:.2f}\tstd-dev {stddev:.2f}\tn= {n}"\
+          .format(mean=bond_d_mean, conf95=1.96*bond_d_sem, stddev=bond_d_stddev, n=len(bond_ds)),
+          end="\t")
+    print()
+    # Space:
     print()
     f.close()
 
@@ -79,6 +110,7 @@ for fg in FGs:
       break
     except:
       print("Skipping {}'N'".format(fg))
+      raise
   print()
 
   #   # II. End-to-end
