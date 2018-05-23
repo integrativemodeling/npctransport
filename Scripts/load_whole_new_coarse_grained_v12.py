@@ -22,9 +22,10 @@ import re
 import sys
 import pandas as pd
 import argparse
+import numpy as np
 from collections import OrderedDict
 from collections import defaultdict
-
+import my_util
 
 IS_TOROID= True
 IS_REMOVE_GLE1_AND_NUP42=True
@@ -45,6 +46,7 @@ else:
     TUNNEL_RADIUS= 375
     NUCLEAR_ENVELOPE_WIDTH= 250
 OBSTACLE_SCALE_FACTOR=1.0 # inflate obstacles a bit to prevent artificial cavities
+VOXELS_N= 110 # for obstacles matrix output
 #kap_k=4.75
 #kap_range=4.5
 sigma0_deg=45
@@ -61,9 +63,15 @@ def parse_commandline():
     parser.add_argument('input_rmf_file', metavar='input_rmf_file', type=str,
                         default='config.pb',
                         help='rmf file of NPC model (e.g., InputData/47-35_1spoke.rmf3)')
-    parser.add_argument('--diffusers_radii', metavar='diffuser_radius', type=int, nargs='*',
+    parser.add_argument('--diffusers_radii', metavar='radius', type=float, nargs='*',
                         default=range(14,29,2),
                         help='list of diffuser radii in A')
+    parser.add_argument('--no_kaps_radii', metavar='radius', type=float, nargs='*',
+                        default=[],
+                        help='list of radii in A to exclude from diffuser radii list for kaps only')
+    parser.add_argument('--no_inerts_radii', metavar='radius', type=float, nargs='*',
+                        default=[],
+                        help='list of radii in A to exclude from diffuser radii list for kaps only')
     parser.add_argument('--n_diffusers', type=int,
                         default=200,
                         help='number of diffuser molecules for each type of diffuser')
@@ -75,6 +83,8 @@ def parse_commandline():
     parser.add_argument('--time_step_factor', type=float,
                         help='factor to change time step from automatically computed one',
                         default=2.0)
+    parser.add_argument('--write_obstacles_voxel_map', action='store_true',
+                        help='write obstacle voxel map after loading RMF file')
     args = parser.parse_args()
     return args
 
@@ -584,7 +594,7 @@ def get_coarse_grained_obstacles(obstacles):
         out_obstacles[R].append(sphere.get_center())
     return out_obstacles
 
-def add_obstacle_type(config, type_name, coords_list, radius):
+def add_obstacle_type_to_config(config, type_name, coords_list, radius):
     '''
     Add obstacles of specified type and radius to config
     using specified coordinates
@@ -605,9 +615,62 @@ def add_obstacle_type(config, type_name, coords_list, radius):
         pos.y=coords[1]
         pos.z=coords[2] + Z_TRANSFORM
 
+def add_obstacles_to_XYZ(XYZ, coords_list, radius_A):
+    '''
+    XYZ- 3D voxels map to which to add obstacles
+    coords_list - list of 3D coordinate vectors
+    radius - radius of all obstacles of this type
+    '''
+    print("Adding voxels of size {0:.1f} to XYZ".format(radius_A))
+    VOXEL_SIDE_NM= 1
+    VOXEL_SIZE_A= 10
+    VOXELS_N=XYZ.shape[0]
+    assert(VOXELS_N==XYZ.shape[1] and VOXELS_N==XYZ.shape[2])
+    VOXELS_LENGTH_A= float(VOXEL_SIZE_A * VOXELS_N)
+    VOXELS_MIN_A= -0.5 * VOXELS_LENGTH_A # left side of leftmost bin
+    VOXELS_MAX_A= VOXELS_MIN_A + VOXELS_LENGTH_A + 1 # right side of rightmost bin
+    radius_voxels= int(min( round(radius_A/VOXELS_LENGTH_A), 1))
+    #volume_NM3= (4.0/3.0)*math.pi*radius_NM**3
+    for coords in coords_list:
+        x=coords[0]
+        y=coords[1]
+        z=coords[2] + Z_TRANSFORM
+        if not (VOXELS_MIN_A - radius_A < x < VOXELS_MAX_A + radius_A and
+                VOXELS_MIN_A - radius_A < y < VOXELS_MAX_A + radius_A and
+                VOXELS_MIN_A - radius_A < z < VOXELS_MAX_A + radius_A):
+            continue
+        # Get coordinates
+        xi= int(math.floor( (x - VOXELS_MIN_A) / VOXEL_SIZE_A))
+        yi= int(math.floor( (y - VOXELS_MIN_A) / VOXEL_SIZE_A))
+        zi= int(math.floor( (z - VOXELS_MIN_A) / VOXEL_SIZE_A))
+        # Go over a box that contains the obstacle (up to rounding) # TODO: if need be, can make the computation more accurate
+        for xii in my_util.range_inclusive(xi-radius_voxels,xi+radius_voxels):
+            for yii in my_util.range_inclusive(yi-radius_voxels,yi+radius_voxels):
+                for zii in my_util.range_inclusive(zi-radius_voxels,zi+radius_voxels):
+                    distance2_voxels= (xi-xii)**2+(yi-yii)**2+(zi-zii)**2
+                    distance_voxels= math.sqrt(distance2_voxels)
+                    if (distance_voxels<=radius_voxels and
+                        xii>=0 and yii>=0 and zii>=0 and
+                        xii<VOXELS_N and yii<VOXELS_N and zii<VOXELS_N):
+                        XYZ[xii][yii][zii]= XYZ[xii][yii][zii]+ 1 #volume_NM3
+
+def write_xyz_matrix(XYZ, typename='obstacles'):
+#    print "TOTAL STATS TIME [sec]: ", stats_time_ns*1E-9
+    print("hello {0}".format(typename))
+    fname="S0.{0}.txt".format(typename)
+    with open(fname,'w') as f:
+        for YZ in XYZ:
+            for Z in YZ:
+                for n_xyz in Z:
+                    print("%2d " % n_xyz, file=f, end='')
+                print ("", file=f)
+        f.close()
+
+
 
 def add_obstacles_from_rmf(config, input_rmf, fg_params):
     global obstacles
+    global args
     # Add all obstacles based on RMF file input_rmf
     f=RMF.open_rmf_file_read_only(input_rmf)
     m=IMP.Model()
@@ -630,11 +693,20 @@ def add_obstacles_from_rmf(config, input_rmf, fg_params):
         # Add particles to configuration file
     if(COARSE_GRAINED_OBSTACLES):
         obstacles=get_coarse_grained_obstacles(obstacles)
+    if args.write_obstacles_voxel_map:
+        XYZ= np.zeros([VOXELS_N, VOXELS_N, VOXELS_N])
     for (radius, coords) in obstacles.iteritems():
-        add_obstacle_type(config,
+        add_obstacle_type_to_config(config,
                       "obstacles %.1f" % radius,
                       coords,
                       radius*OBSTACLE_SCALE_FACTOR) # inflate obstacles a bit to prevent artificial holes
+        if args.write_obstacles_voxel_map:
+            add_obstacles_to_XYZ(XYZ,
+                                 coords,
+                                 radius*OBSTACLE_SCALE_FACTOR)
+    if args.write_obstacles_voxel_map:
+        write_xyz_matrix(XYZ,'obstacles')
+
 
 def get_basic_config(cmdline_args):
     config = Configuration()
@@ -676,7 +748,8 @@ def get_basic_config(cmdline_args):
 
 def add_kaps_and_inerts(config,
                         n_diffusers,
-                        diffusers_radii,
+                        kaps_radii,
+                        inerts_radii,
                         kap_interaction_sites,
                         fg_regions_to_params):
     '''
@@ -688,31 +761,7 @@ def add_kaps_and_inerts(config,
     nonspecifics={}
     kaps={}
     SPECIAL_HACK= True
-    for radius in diffusers_radii:
-        inert_name="inert%d" % radius
-        nonspecifics[radius]= IMP.npctransport.add_float_type(config,
-                                                              number=n_diffusers,
-                                                              radius=radius,
-                                                              type_name=inert_name,
-                                                              interactions=0)
-        # TODO: for now, this is very ad hoc, and should be generalized
-        #       also, same binding sites for FGs and kaps, need to think how to handle
-        if radius>=50 and SPECIAL_HACK:
-            assert(20 in kaps)
-            n_interactions= int(math.ceil(5*radius/40.0))
-            nonspecifics[radius].interactions.lower= n_interactions
-            kaps[20].number.lower= kaps[20].number.lower + args.n_diffusers * n_interactions * 2
-            kaps[20].interactions.lower= kaps[20].interactions.lower + 1
-            interaction= IMP.npctransport.add_interaction \
-                          ( config,
-                            name0= "kap20",
-                            name1= inert_name,
-                            interaction_k= 10.0,
-                            interaction_range= 30.0,
-                          )
-            interaction.active_sites0.append(0)
-            continue
-
+    for radius in kaps_radii:
         kap_name="kap%d" % radius
         kaps[radius]= IMP.npctransport.add_float_type(config,
                                                       number=args.n_diffusers,
@@ -740,6 +789,30 @@ def add_kaps_and_inerts(config,
                 if kap_name=="kap20" and SPECIAL_HACK:
                     for site_id in my_util.range_inclusive(1, kap_interaction_sites):
                         interaction.active_sites1.append(site_id)
+    for radius in inerts_radii:
+        inert_name="inert%d" % radius
+        nonspecifics[radius]= IMP.npctransport.add_float_type(config,
+                                                              number=n_diffusers,
+                                                              radius=radius,
+                                                              type_name=inert_name,
+                                                              interactions=0)
+        # TODO: for now, this is very ad hoc, and should be generalized
+        #       also, same binding sites for FGs and kaps, need to think how to handle
+        if radius>=50 and SPECIAL_HACK:
+            assert(20 in kaps)
+            n_interactions= int(math.ceil(5*radius/40.0))
+            nonspecifics[radius].interactions.lower= n_interactions
+            kaps[20].number.lower= kaps[20].number.lower + args.n_diffusers * n_interactions * 2
+            kaps[20].interactions.lower= kaps[20].interactions.lower + 1
+            interaction= IMP.npctransport.add_interaction \
+                          ( config,
+                            name0= "kap20",
+                            name1= inert_name,
+                            interaction_k= 10.0,
+                            interaction_range= 30.0,
+                          )
+            interaction.active_sites0.append(0)
+            continue
 
 
 
@@ -798,9 +871,12 @@ for fg0, regions_to_params0 in fgs_regions_to_params.iteritems():
                 interactionFG_FG.nonspecific_k.lower= nonspec_k
 # Add kaps and inerts:
 if not args.only_nup:
+    kaps_radii= set(args.diffusers_radii) - set(args.no_kaps_radii)
+    inerts_radii= set(args.diffusers_radii) - set(args.no_inerts_radii)
     add_kaps_and_inerts(config,
                         args.n_diffusers,
-                        args.diffusers_radii,
+                        kaps_radii,
+                        inerts_radii,
                         kap_interaction_sites,
                         fgs_regions_to_params)
 
