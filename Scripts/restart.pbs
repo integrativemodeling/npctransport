@@ -1,0 +1,89 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -o ./Logs/
+#$ -cwd
+#$ -j y
+#$ -r y
+#$ -N scan_Rg
+#$ -l arch=linux-x64,mem_free=0.75G
+#$ -l h_rt=300:00:00
+#$ -t 1-1
+
+# Constants:
+IMP=$HOME/imp_git/fast/setup_environment.sh
+if [ "$#" -lt 1 ]; then
+    CONFIG=config.pb
+else
+    CONFIG=$1
+fi
+i=$SGE_TASK_ID
+OUTPUT=output${i}N.pb
+MOVIE=movie${i}N.rmf
+RESTART_OUTPUT=`pwd -P`/Output/output$i.pb
+#SRC_FG=./outputN_from_Test_big5.pb
+PWD_ORIG=`pwd -P`
+FINAL_OUTFOLDER=$PWD_ORIG/Output/
+TMP_OUTFOLDER=`mktemp -d -p $FINAL_OUTFOLDER`
+echo "Output folder: $FINAL_OUTFOLDER"
+echo "Temporary output folder: $TMP_OUTFOLDER"
+if [ exit_status -ne 0 ] || [ ! -d $TMP_OUTFOLDER ]; then
+    echo "Bad tmp folder '$TMP_OUTFOLDER' - exiting"
+    exit $exit_status
+fi
+seed=`od -An -N4 -td4 /dev/random`
+
+# Run info:
+echo "Start time: `date`"
+echo Running \"$0 $argv\"
+echo "Output folder $OUTFOLDER"
+echo "IMP: $IMP"
+echo "Work id $i"
+echo SEED: $seed
+echo "uname -a:"
+uname -a
+echo CONFIG $CONFIG
+echo ======
+
+# Checks:
+if [ -e $FINAL_OUTFOLDER/$OUTPUT ] ; then
+    echo "new output $OUTPUT already exists in $FINAL_OUTFOLDER/"
+    exit -1
+fi
+if [ ! -s $RESTART_OUTPUT ] ; then
+    echo "restart output $RESTART_OUTPUT not found"
+    exit -1
+#    echo OVERIDING
+fi
+
+# Prepare to run:
+#cp $SRC_FG $CONFIG $TMP_OUTFOLDER/
+cp $RESTART_OUTPUT $CONFIG $TMP_OUTFOLDER/
+cd $TMP_OUTFOLDER
+echo "Temporary run folder $TMP_OUTFOLDER"
+touch $FINAL_OUTFOLDER/$OUTPUT # place holder to indicate job in progress
+touch $FINAL_OUTFOLDER/TIMESTAMP
+echo Timestep written by Job id: $JOB_ID task $i >> $FINAL_FOLDER/TIMESTAMP
+
+# Run:
+$IMP ~/imp_git/fast/module_bin/npctransport/fg_simulation \
+     --configuration $CONFIG \
+     --output $OUTPUT \
+     --short_sim_factor 5.0 \
+    --random_seed $seed --work_unit $i \
+    --restart $RESTART_OUTPUT # --restart_fgs_only $SRC_FG
+#     --conformations $TMP_NEW_MOVIE_PATH\
+
+# Cleanup:
+exit_status=$?
+if [ exit_status -ne 0 ]; then
+    echo "Bad fg_simulation run - deleting results"
+    rm $TMP_OUTFOLDER/${OUTPUT}* $TMP_OUTFOLDER/$MOVIE
+    rm -fr $TMP_OUTFOLDER/
+    exit $exit_status
+fi
+#rm $TMP_OUTFOLDER/$CONFIG
+ALL_TMP_OUTPUTS="`ls $TMP_OUTFOLDER/${OUTPUT}* $TMP_OUTFOLDER/$MOVIE`"
+echo "Moving $ALL_TMP_OUTPUTS to $FINAL_OUTFOLDER/"
+mv $ALL_TMP_OUTPUTS $FINAL_OUTFOLDER/ && LEFTOVERS=`ls $TMP_OUTFOLDER/*.pb $TMP_OUTFOLDER/*.rmf` && "echo Removing leftovers $LEFTOVERS" && rm $LEFTOVERS
+rmdir $TMP_OUTFOLDER
+echo "FINISHED RUN at `date`"
