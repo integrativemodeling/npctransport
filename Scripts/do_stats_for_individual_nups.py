@@ -22,11 +22,12 @@ def handle_fg(fg, skip_n_rows, Ns=0):
         " awk 'BEGIN{is=0}{if(is==1){print $NF; is=2; }" + \
         " else { if($1 ~ /number_of_b/){is=1}}}'"
   n_fgs= int( subprocess.check_output(cmd_n_fgs, shell=True) )
-  Rbead=8.0
+#  Rbead=8.0
   output= Output()
   fname= "output_{fg}.pb".format(fg=fg+Ns*'N')
   with open(fname, "rb") as f:
     output.ParseFromString(f.read())
+    Rbead=output.assignment.fgs[0].radius.value
     stats= output.statistics
     Rgs= []
     Rgs_normalized= []
@@ -103,14 +104,13 @@ if(len(sys.argv)>2):
 else:
   FGs= ["FSFG_generic", "GLFG_generic", "Nup1", "Nup100", "Nup49", "Nsp1"]
 for fg in FGs:
-  for Ns in my_util.range_inclusive(0,0,-1):
+  for Ns in my_util.range_inclusive(3,0,-1):
     try:
       handle_fg(fg, skip_n_rows, Ns=Ns)
       print ("Handled {}{} successfully".format(fg, Ns*'N'))
       break
     except:
-      print("Skipping {}'N'".format(fg))
-      raise
+      print("Skipping {}{}".format(fg, Ns*'N'))
   print()
 
   #   # II. End-to-end
