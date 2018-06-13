@@ -11,7 +11,8 @@ class FGParamsFactory:
                nonspec_k= None,
                nonspec_range= None,
                backbone_k= None,
-               backbone_tau= None):
+               backbone_tau= None,
+               rest_length_factor= None):
 #    assert(res_to>=res_from)
     self.res_from= res_from
     self.res_to= res_to
@@ -23,8 +24,7 @@ class FGParamsFactory:
     self.nonspec_range= nonspec_range
     self.backbone_k= backbone_k
     self.backbone_tau= backbone_tau
-
-  def
+    self.rest_length_factor= rest_length_factor
 
   def deepcopy(self):
     return copy.deepcopy(self)
@@ -32,7 +32,7 @@ class FGParamsFactory:
 def FGParams_from_default(default_params,
                           res_from,
                           res_to):
-  ret= copy.deepcopy(default_params)
+  ret= default_params.deepcopy()
   ret.res_from= res_from
   ret.res_to= res_to
   return ret
