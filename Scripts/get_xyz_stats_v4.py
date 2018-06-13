@@ -92,7 +92,7 @@ def _sum_xyzs_exception(xyzs):
     if xyzs is None:
         print("Empty xyzs skipped")
         return
-    cache_frequency=100
+    cache_frequency=500
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
             if(random.random()<0.9 or DISABLE_RANDOM):
@@ -125,8 +125,8 @@ def sum_xyzs(xyzs):
 ############# Main ############
 if __name__ == '__main__':
     #import cPickle as p; D=p.load(open('TMP.get_float_stats_cache.p','rb')); print len(D[2]);
-#    CACHE_FNAME='TMP.get_float_stats_cache.p'
-    CACHE_FNAME= None
+    CACHE_FNAME='TMP.get_float_stats_cache.p'
+#    CACHE_FNAME= None
     fnames=set(sys.argv[1:])
     try:
         #    with gzip.open(CACHE_FNAME+".gzip",'rb') as f:
@@ -143,7 +143,7 @@ if __name__ == '__main__':
         processed_fnames=set()
     stats_time_ns=0.0
     fnames=fnames.difference(processed_fnames)
-    pool= multiprocessing.Pool(processes=12)
+    pool= multiprocessing.Pool(processes=8)
     manager= multiprocessing.Manager()
     processed_fnames= manager.list(processed_fnames)
     print("Starting pool")
