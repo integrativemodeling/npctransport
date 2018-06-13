@@ -24,12 +24,14 @@ global_to_time_ns=100000000
 def get_diffuser_data_from_file(fname):
     global global_from_time_ns
     global global_to_time_ns
-    f=open(sys.argv[1], "rb")
+    f=open(fname, "rb")
     config= Output()
     config.ParseFromString(f.read())
     s= config.statistics
     diffuser_data= {}
     for f in s.floaters:
+        if(re.match("inert", f.type)):
+            continue
         is_first= True
         x= []
         y= []
@@ -56,7 +58,7 @@ def get_diffuser_data_from_file(fname):
             y.append(od.diffusion_coefficient*1E+6)
             w.append(dT)
         diffuser_data[f.type]={'x':x, 'y':y, 'w':w}
-    print("Finished proceccing", fname)
+    print("Finished processing", fname)
     return diffuser_data
 
 def get_diffuser_data_from_files(fnames):
@@ -118,6 +120,7 @@ def get_diffusion_coefficient_estimates(diffuser_type, diffuser_data, is_plot=Tr
     # get bound and unbound estimates
     xx= np.array([0.0, 1.0]).reshape(2,1)
     yy= regr.predict(xx)
+    print("yy {}".format(yy))
     return yy
 #   plt.show()
 
@@ -127,7 +130,7 @@ pp= PdfPages('output.pdf')
 if len(sys.argv)<=1:
     print("Usage", sys.argv[0]," output_file_1 [output_file2] ...")
     sys.exit(-1)
-global_to_time_ns= 28500.0
+#global_to_time_ns= 28500.0
 dd_all= get_diffuser_data_from_files(sys.argv[1:])
 unbound_d={}
 bound_d={}
@@ -137,8 +140,8 @@ for diffuser_type, diffuser_data in dd_all.iteritems():
                                             is_plot=True)
     if yy is None:
         continue
-    unbound_d[diffuser_type]= yy[0]
-    bound_d[diffuser_type]= yy[1]
+    unbound_d[diffuser_type]= yy[0][0]
+    bound_d[diffuser_type]= yy[1][0]
 print(unbound_d)
 print(bound_d)
 x=[]
@@ -167,8 +170,15 @@ plt.ylim(ymin=0.0)
 plt.legend()
 ax2= plt.gca().twinx()
 barwidth=2.5
+print("DEBUG")
+print(x)
+print(y1)
+print(y0)
+yy1_norm=list([yy1/yy0 for yy0,yy1 in zip(y0,y1)])
+print(yy1_norm)
+print(barwidth)
 ax2.bar(x,
-        [yy1/yy0 for yy0,yy1 in zip(y0,y1)],
+        yy1_norm,
         barwidth,
         label='in/out ratio',
         alpha=0.4,
