@@ -177,9 +177,13 @@ def sum_output_stats(file_summary):
 
 
 
-############# Main ############
+############# Main ###########
 fnames=set(glob.glob(sys.argv[1]+"*.pb"))
 unpickle_or_initialize_globals(CACHE_FNAME)
+if len(sys.argv)>3 and sys.argv[3]=='report_cache_only':
+    print_stats(N, table, total_sim_time_sec)
+    sys.exit()
+
 #modulus = int(sys.argv[2])
 fnames=fnames.difference(processed_fnames)
 print "Processing", len(fnames), " files that are not present in cache"
