@@ -265,8 +265,8 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
                    backbone_k= 0.0075,
                    backbone_tau= 50 )
     default_disordered_fgp= default_fgp.get_copy()
-    default_disordered_fgp.kap_k= None
-    default_disordered_fgp.kap_range= None
+    default_disordered_fgp.kap_k= 1E-12
+#    default_disordered_fgp.kap_range= 1E-9
     default_FSFG= default_fgp.get_copy()
     default_FSFG.self_k= 1.32
     default_FSFG.nonspec_k= 0.01
@@ -714,7 +714,7 @@ def get_basic_config(cmdline_args):
     IMP.npctransport.set_default_configuration(config)
     config.statistics_fraction.lower=1.0
     #config.dump_interval=1
-    config.interaction_k.lower=10
+    config.interaction_k.lower=1e-9
     config.interaction_range.lower=10
     config.backbone_k.lower=0.0075 #kcal/mol/A^2
     config.is_backbone_harmonic=1
@@ -761,9 +761,12 @@ def add_kaps_and_inerts(config,
     '''
     nonspecifics={}
     kaps={}
-    MIN_CARGO_R= 50
-    np_inerts_radii= np.array(inerts_radii)
-    SPECIAL_HACK= True and (len(np_inerts_radii[np.inerts_radii>=MIN_CARGO_R])>0) # if at least one cargo
+    MIN_CARGO_R= 50.0
+    np_inerts_radii= np.array(list(inerts_radii))
+    print("Inerts_radii {}".format(np_inerts_radii))
+    print("Number of large cargos is {}".format(len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])))
+    SPECIAL_HACK= True and (len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])>0) # activate if at least one cargo
+    print("SPECIAL HACK for large cargos = {}".format(SPECIAL_HACK))
     for radius in kaps_radii:
         kap_name="kap%d" % radius
         kaps[radius]= IMP.npctransport.add_float_type(config,
@@ -779,19 +782,23 @@ def add_kaps_and_inerts(config,
                 #                                  name1=inert_name,
                 #                                  interaction_k=0,
                 #                                  interaction_range=0)
-                interaction= IMP.npctransport.add_interaction \
-                             ( config,
-                               name0=fg_name + region,
-                               name1=kap_name,
-                               interaction_k= params.kap_k,
-                               interaction_range= params.kap_range,
-                               range_sigma0_deg= sigma0_deg,
-                               range_sigma1_deg= sigma1_deg)
-                if(params.nonspec_k is not None):
-                    interaction.nonspecific_k.lower= params.nonspec_k
-                if kap_name=="kap20" and SPECIAL_HACK:
-                    for site_id in my_util.range_inclusive(1, kap_interaction_sites):
-                        interaction.active_sites1.append(site_id)
+                print("Adding interaction between {} and {} with k {}".format(fg_name+region,
+                                                                              kap_name,
+                                                                              params.kap_k))
+                if params.kap_k is not None and params.kap_range is not None:
+                    interaction= IMP.npctransport.add_interaction \
+                        ( config,
+                          name0=fg_name + region,
+                          name1=kap_name,
+                          interaction_k= params.kap_k,
+                          interaction_range= params.kap_range,
+                          range_sigma0_deg= sigma0_deg,
+                          range_sigma1_deg= sigma1_deg)
+                    if(params.nonspec_k is not None):
+                        interaction.nonspecific_k.lower= params.nonspec_k
+                    if kap_name=="kap20" and SPECIAL_HACK:
+                        for site_id in my_util.range_inclusive(1, kap_interaction_sites):
+                            interaction.active_sites1.append(site_id)
     for radius in inerts_radii:
         inert_name="inert%d" % radius
         nonspecifics[radius]= IMP.npctransport.add_float_type(config,
