@@ -1,0 +1,594 @@
+#!/usr/bin/env python
+from IMP.npctransport import *
+import sys
+import glob
+import re
+import math
+import scipy.stats as stats
+import cPickle as pickle
+import numpy as np
+import os
+import traceback
+
+####### Global params ###
+CONF= 0.95 # confidence interval required
+#TEMPERATURE_K_INDEX=int(sys.argv[3])
+N_KAPS=8 # TODO: get this from assignment
+N_SITES_PER_KAP=4 # TODO: get this from assignment
+N_SITES_PER_FG=1
+N_FGS=8 # TODO: get this from assignment
+AVOGADRO=6.0221409E+23 # molecules/mole
+L_per_A3=1E-27 # Liters per A^3
+kB_kcal_per_mol_K=0.0019872041
+TEMP_MIN_DS=273
+TEMP_MAX_DS=335
+EPSILON=1e-9
+IS_NEW_SITE_STATS= False
+
+def get_indexed_fields(message, message_name="", indexed_fields={}):
+    ''' return all fields in a protobuf message with an indexed value (index field),
+        as a dictionary from nexted message name to value of indexed field '''
+    for fd,value in (message.ListFields()):
+        if fd.name=="index":
+            indexed_fields[message_name]= message.value
+        if fd.message_type is not None:
+            if(message_name!="" and message_name[-1]!="."):
+                message_name=message_name+"."
+            if(fd.label == fd.LABEL_REPEATED):
+                for i,single_value in enumerate(value):
+                    indexed_fields= get_indexed_fields(single_value,
+                                                       message_name+fd.name+str(i),
+                                                       indexed_fields)
+            else:
+                indexed_fields= get_indexed_fields(value,
+                                                   message_name+fd.name,
+                                                   indexed_fields)
+    return indexed_fields
+
+def accumulate(dictionary, key, value, time_ns):
+    new_value=[value*time_ns, time_ns, value**2*time_ns, 1] # mean / time / mean-square / n
+    if key in dictionary:
+        dictionary[key] = [x+y for x,y in zip (dictionary[key],new_value)]
+    else:
+        dictionary[key] = new_value
+
+def accumulate_check(dictionary, key, value, time_ns):
+    ''' accumulate after checking value is not inf or nan,
+        return true if added
+    '''
+    check_ok = (value != float('inf') and not math.isnan(value))
+    if check_ok:
+        accumulate(dictionary, key, value, time_ns)
+    return check_ok
+
+
+def get_output_num(fname):
+    m = re.search('output[_a-zA-Z]*([0-9]*)\.pb', fname)
+    if m is None: raise ValueError('cannot parse %s' % fname)
+    return int(m.groups(0)[0])
+
+# returns number of sems for symmetric confidence intravel conf_interval
+def get_sems_for_conf(conf_interval):
+    a=0.5+0.5*conf_interval
+    return stats.norm.ppf(a)
+
+def do_stats(table, units_label, is_fraction=False, prefix=""):
+    ''' return dictionary with mean and standard-error of mean for each key in table'''
+    # print transports per particle per second
+    keys=sorted(table.keys())
+    ret={}
+    for key in keys:
+        t_ns= table[key][1]
+        mean= table[key][0]/(t_ns+0.0001)
+        mean2= table[key][2]/(t_ns+0.0001)
+        n= table[key][3]
+        stddev= math.sqrt(mean2-mean**2)
+        stderr= stddev/math.sqrt(n+0.0001) # dividing by n is probably ok when constant stat intervals are used
+        conf=get_sems_for_conf(CONF)
+        if(prefix <> ""):
+            print prefix,
+        if(is_fraction):
+            print key, 'mean: %10.2f%% +- %10.2f%% [%s] ; t=%.1f [ns]' % \
+                (mean*100, stderr*100*conf, units_label, t_ns)
+        else:
+            print key, 'mean: %10.8f +- %10.8f [%s] ; t=%.1f [ns]' % \
+                (mean, stderr*conf, units_label, t_ns)
+        ret[key]=(mean, stderr, t_ns)
+    return ret
+
+def do_stats_stddev(table, table_squared,
+                    units_label,
+                    is_fraction=False,
+                    prefix=""):
+    '''
+    return standard deviation around mean for each key in table,
+    based on table of measurements and table of square measurements
+    using var(X)=E(X^2)-E(X)^2,
+    table - dictionary of keys and values
+    table_square - dictionary of keys and squared values
+    is_fraction - are values a fraction between 0 and 1 or not
+    prefix - prefix to print before output if not ""
+    '''
+    # print transports per particle per second
+    keys=sorted(table.keys())
+    ret={}
+    for key in keys:
+        t_ns= table[key][1]
+        mean= table[key][0]/(t_ns+0.0001)
+        mean2= table_squared[key][0]/(t_ns+0.0001)
+        stddev= math.sqrt(mean2-mean**2)
+        if(prefix <> ""):
+            print prefix,
+        if(is_fraction):
+            print key, 'std-dev: %10.2f%% [%s] ; t=%.1f [ns]' % \
+                (stddev*100, units_label, t_ns)
+        else:
+            print key, 'std-dev: %10.8f [%s] ; t=%.1f [ns]' % \
+                (stddev, units_label, t_ns)
+        ret[key]=(stddev, t_ns)
+    return ret
+
+
+
+def get_k_low_high(k_stats):
+    [k,_,t]= k_stats
+#    print k,t
+    if t==0:
+        return [-1,-1,-1]
+    n= k * t
+    stderr_n= math.sqrt(n)
+    conf= get_sems_for_conf(CONF)
+    n_high=  n + conf*stderr_n
+    n_low=   n - conf*stderr_n
+    k_high=  n_high / t
+    k_low=   n_low / t
+    return [k, k_low, k_high]
+
+def get_temperature_from_key(key, key_suffix=""):
+    ''' if key_suffix is supplied - return match only if it is included after temperature '''
+    m=re.match("(?P<temperature_K>[0-9\.]+) " + key_suffix, key)
+    if not m:
+        return None
+    temperature_K=float(m.group('temperature_K'))
+    return temperature_K
+
+def get_dH_and_dS(kDs_dict, key_suffix):
+    x=[]
+    y=[]
+    for key,kDs in kDs_dict.iteritems():
+        temperature_K= get_temperature_from_key(key, key_suffix)
+        if not temperature_K:
+            continue
+        if temperature_K<TEMP_MIN_DS or temperature_K>TEMP_MAX_DS:
+            continue
+        x.append(-1.0/temperature_K/kB_kcal_per_mol_K)
+        [kD, kD_low, kD_high] = kDs
+        y.append(-math.log(kD)) # natural log of kA
+    # ln(kA) = dH*(-1.0/(kB*T)) + dS/kB <==> dH-dS*T = -kB*T*ln(kA) <==> dG = -kB*T*ln(kA)
+    if(len(x)<=1):
+        return [float('nan'),float('nan')]
+    [dH,dS_per_kB]=np.polyfit(x,y,1)
+    dS=dS_per_kB*kB_kcal_per_mol_K
+    return [dH,dS]
+
+def get_dH_and_dS2(kDs_dict, key_suffix):
+    x=[]
+    y=[]
+    for key,kDs in kDs_dict.iteritems():
+        m=re.match("(?P<temperature_K>[0-9\.]+) " + key_suffix, key)
+        if not m:
+            continue
+        temperature_K=float(m.group('temperature_K'))
+        if temperature_K<TEMP_MIN_DS or temperature_K>TEMP_MAX_DS:
+            continue
+        x.append(temperature_K)
+        [kD, kD_low, kD_high] = kDs
+        y.append(math.log(kD)*kB_kcal_per_mol_K*temperature_K)
+    # ln(kA) = dH*(-1.0/(kB*T)) + dS/kB <==> dH-dS*T = -kB*T*ln(kA) <==> dG = -kB*T*ln(kA)
+    if len(x)<=1:
+        return [float('nan'),float('nan')]
+    [minus_dS,dH]=np.polyfit(x,y,1)
+    dS= -minus_dS
+    return [dH,dS]
+
+
+
+
+############# Main ############
+
+def do_all_stats(fnames, STATS_FROM_SEC):
+    global IS_NEW_SITE_STATS
+    STATS_FROM_NS= STATS_FROM_SEC*(1e+9)
+    k_ons_i= {}
+    k_offs_i= {}
+    k_ons_ii= {}
+    k_offs_ii= {}
+    k_ons_ss= {} # mc = missing contact
+    k_offs_ss= {}
+    kDs_chains= {}
+    fbounds1_floats= {}
+    fbounds2_floats= {}
+    fbounds2= {}
+    fbounds_sites1_old= {}
+    fbounds_sites2_old= {}
+    fbounds_sites1_new= {}
+    fbounds_sites2_new= {}
+    bound_times= {}
+    unbound_times= {}
+    mean_rg= {}
+    mean_rg2= {}
+    mean_dmax= {}
+    mean_dmax2= {}
+    mean_bond_rest_length= {}
+    mean_bond_rest_length2= {}
+    energy= {}
+    n= 0
+    total_sim_time_sec=0.0
+    #modulus = int(sys.argv[2])
+    indexed_fields=None # indexed fields that need to be the same for all output files
+    for fname in fnames:
+        if(not os.path.isfile(fname)):
+            print("Skipping {} - not exists or not a regular file".format(fname))
+            continue
+        if(os.stat(fname).st_size == 0):
+            print("Warning: skipping {} - empty file".format(fname))
+            continue
+        output= IMP.npctransport.Output()
+        try:
+            f=open(fname, "rb")
+            output.ParseFromString(f.read())
+        except ValueError as e:
+            print "Warning: EXCEPTION ", fname, e
+            continue
+        except:
+            print "Warning: EXCEPTION ", fname
+            continue
+        if(len(output.statistics.global_order_params)<2):
+            print("Warning: skipping file {} - does not contain proper statistics".format(fname))
+            continue
+        cur_indexed_fields= get_indexed_fields(output.assignment)
+        cur_indexed_fields.pop("temperature", None) # make sure temperature is not included in indexed fields
+        if indexed_fields is None:
+            indexed_fields= cur_indexed_fields
+        else:
+            assert(indexed_fields.values()==cur_indexed_fields.values()) # TODO: perhaps except temperature
+        temperature_k= output.assignment.temperature_k.value
+    #        if(output.assignment.temperature_k.index <> TEMPERATURE_K_INDEX):
+    #            continue
+        start_sim_time_sec= output.statistics.global_order_params[0].time_ns*(1e-9)
+        end_sim_time_sec= output.statistics.global_order_params[-1].time_ns*(1e-9)
+        sim_time_sec= end_sim_time_sec-max(start_sim_time_sec,STATS_FROM_SEC)
+        box_volume_L= output.assignment.box_side.value**3 * L_per_A3
+    #        print "TIME", sim_time_sec
+        if sim_time_sec<0:
+            print "SKIP", fname, " ", sim_time_sec
+            continue
+        total_sim_time_sec= total_sim_time_sec+sim_time_sec
+        # for floater in output.statistics.floaters:
+        #     ftype = floater.type
+        #     was_bound=floater.order_params[0].interacting_fraction>0.0
+        #     n_on=0
+        #     n_off=0
+        #     time_state=0.0
+        #     for fop in floater.order_params:
+        #         if fop.time_ns<STATS_FROM_NS:
+        #             continue
+        #         fbound = fop.interacting_fraction
+        #         accumulate(fbounds, ftype, fbound, 1)
+        #         is_bound=fbound>0.0
+        #         if(is_bound != was_bound):
+        #             if is_bound:
+        #                 accumulate(unbound_times, ftype, time_state, 1) # finished unbound
+        #                 n_on=n_on+1
+        #             else:
+        #                 accumulate(bound_times, ftype, time_state, 1) # finished bound
+        #                 n_off=n_off+1
+        #             was_bound=is_bound
+        #             time_state=0.0
+        #         else:
+        #             time_state=time_state+1
+        ii=0
+        for floater in output.statistics.floaters:
+            iname = "%.2f fg0 - %s" % (temperature_k, floater.type)
+            prev_time_ns=floater.order_params[0].time_ns
+            for fop in floater.order_params:
+                elapsed_time_ns= fop.time_ns - prev_time_ns
+                prev_time_ns= fop.time_ns
+                if fop.time_ns<STATS_FROM_NS:
+                    continue
+                fb2= fop.interacting_fraction
+                if(math.isnan(fb2)):
+                    continue
+                nb2 = fb2 * N_KAPS
+                if nb2>0:
+                    fb1= nb2 * fop.chains_per_interacting_floater / (N_FGS+0.0)
+                else:
+                    fb1=0.0
+                accumulate_check(fbounds1_floats, iname, fb1, elapsed_time_ns)
+                accumulate_check(fbounds2_floats, iname, fb2, elapsed_time_ns)
+    #           print "kD@%.0f ns is %.1e" % (fop.time_ns, kD)
+
+        for interaction in output.statistics.interactions:
+            iname = "%.2f %s - %s" % (temperature_k , interaction.type0, interaction.type1 )
+            for iop in interaction.order_params:
+                if iop.time_ns<STATS_FROM_NS:
+                    continue
+                k_on_i=  iop.avg_on_per_unbound_i_per_ns
+                t_on_i_ns= iop.on_i_stats_period_ns
+                k_off_i= iop.avg_off_per_bound_i_per_ns
+                t_off_i_ns=iop.off_i_stats_period_ns
+                k_on_ii=  iop.avg_on_per_unbound_ii_per_ns
+                t_on_ii_ns= iop.on_ii_stats_period_ns
+                k_off_ii= iop.avg_off_per_bound_ii_per_ns
+                t_off_ii_ns=iop.off_ii_stats_period_ns
+                k_on_ss= iop.avg_on_per_missing_contact_per_ns
+                t_on_ss_ns= iop.on_stats_period_ns
+                k_off_ss= iop.avg_off_per_contact_per_ns
+                t_off_ss_ns= iop.off_stats_period_ns
+                accumulate_check(k_ons_i, iname, k_on_i, t_on_i_ns)
+                accumulate_check(k_offs_i, iname, k_off_i, t_off_i_ns)
+                accumulate_check(k_ons_ii, iname, k_on_ii, t_on_ii_ns)
+                accumulate_check(k_offs_ii, iname, k_off_ii, t_off_ii_ns)
+                accumulate_check(k_ons_ss, iname, k_on_ss, t_on_ss_ns)
+                accumulate_check(k_offs_ss, iname, k_off_ss, t_off_ss_ns)
+                fbound2= iop.avg_fraction_bound_particles_ii
+                accumulate_check(fbounds2, iname, fbound2, 1)
+                fbound_sites1_old= iop.avg_contacts_per_particle_i/N_SITES_PER_FG
+                accumulate_check(fbounds_sites1_old, iname, fbound_sites1_old, 1)
+                fbound_sites2_old= iop.avg_contacts_per_particle_ii/N_SITES_PER_KAP
+                accumulate_check(fbounds_sites2_old, iname, fbound_sites2_old, 1)
+                if iop.HasField('avg_fraction_bound_particle_sites_i'):
+                    IS_NEW_SITE_STATS= True
+                    fbound_sites1_new= iop.avg_fraction_bound_particle_sites_i
+                    accumulate_check(fbounds_sites1_new, iname, fbound_sites1_new, 1)
+                    fbound_sites2_new= iop.avg_fraction_bound_particle_sites_ii
+                    accumulate_check(fbounds_sites2_new, iname, fbound_sites2_new, 1)
+
+                ii=ii+1
+        for fg in output.statistics.fgs:
+            fg_name= "%.2f %s" % (temperature_k, fg.type)
+            prev_time_ns=fg.order_params[0].time_ns
+            for fgop in fg.order_params:
+                elapsed_time_ns= fgop.time_ns - prev_time_ns
+                prev_time_ns= fgop.time_ns
+                if fgop.time_ns<STATS_FROM_NS:
+                    continue
+                cur_mean_rg= fgop.mean_radius_of_gyration
+                cur_mean_rg2= fgop.mean_square_radius_of_gyration
+                accumulate_check(mean_rg, fg_name, cur_mean_rg, elapsed_time_ns)
+                accumulate_check(mean_rg2, fg_name, cur_mean_rg2, elapsed_time_ns)
+                cur_mean_dmax= fgop.mean_end_to_end_distance
+                cur_mean_dmax2= fgop.mean_square_end_to_end_distance
+                accumulate_check(mean_dmax, fg_name, cur_mean_dmax, elapsed_time_ns)
+                accumulate_check(mean_dmax2, fg_name, cur_mean_dmax2, elapsed_time_ns)
+                cur_mean_bond_rest_length= fgop.mean_bond_distance
+                cur_mean_bond_rest_length2= fgop.mean_square_bond_distance
+                accumulate_check(mean_bond_rest_length, fg_name,
+                                 cur_mean_bond_rest_length, elapsed_time_ns)
+                accumulate_check(mean_bond_rest_length2, fg_name,
+                                 cur_mean_bond_rest_length2, elapsed_time_ns)
+        for op in output.statistics.global_order_params:
+            if op.time_ns<STATS_FROM_NS:
+                continue
+            if(op.energy < 1E+100 and not math.isnan(op.energy)):
+                accumulate_check(energy,"energy", op.energy, 1)
+        n=n+1
+
+    if n==0:
+        raise RuntimeError \
+            ("Error - could not process " +
+             "single file {}".format(sys.argv[1]) if len(fnames)==1 \
+                 else "{:d} files".format(len(fnames)))
+    print "Indexed Fields:", indexed_fields
+    print "K_on_i:"
+    on_stats_i=do_stats(k_ons_i, "per ns per unbound fg motif")
+    print "K_off_i:"
+    off_stats_i=do_stats(k_offs_i, "per ns per bound fg motif")
+    print "K_on_ii:"
+    on_stats_ii=do_stats(k_ons_ii, "per ns per unbound float")
+    print "K_off_ii:"
+    off_stats_ii=do_stats(k_offs_ii, "per ns per bound float")
+    print "K_on_ss:"
+    on_stats_ss=do_stats(k_ons_ss, "per ns per missing NTF-FG motif contact")
+    print "K_off_ss:"
+    off_stats_ss=do_stats(k_offs_ss, "per ns per NTF-FG motif contact")
+    print "fraction bounds:"
+    #do_stats(fbounds, "of floats", is_fraction=True)
+    fbound2_stats=do_stats(fbounds2, "of floats (from interaction order params)", is_fraction=True)
+    fbounds_sites1_stats_old=do_stats(fbounds_sites1_old, "of FG-sites (from old interaction order params)", is_fraction=True)
+    fbounds_sites2_stats_old=do_stats(fbounds_sites2_old, "of float-sites (from old interaction order params)", is_fraction=True)
+    kDs_dict_from_fbounds_old={}
+    for key in fbounds_sites1_stats_old.iterkeys():
+        if not re.search("fg0 - kap20", key):
+            continue
+        # A is FG sites and B is kap sites
+        EPS=1E-9
+        B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
+        fboundA= max(min(fbounds_sites1_stats_old[key][0],1.0), EPSILON) # [AB]/[A0]
+        fboundB= max(min(fbounds_sites2_stats_old[key][0],1.0), EPSILON) # [AB]/[B0]
+        A_per_AB= (1-fboundA)/(fboundA) # [A]/[AB]
+        B= (1-fboundB)*B0 # [B]
+        kD = A_per_AB * B # [A]*[B]/[AB]
+        print key, "kD from fraction bound %.2e [M] OLD" % kD
+        if(kD<=0.0):
+            continue
+        kDs_dict_from_fbounds_old[key]=[kD,-1.0,-1.0]
+    [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_old, "fg0 - kap20")
+    if not math.isnan(dH) and not math.isnan(dS):
+        T= 297.15
+        print "fg0-kap20 site-site-from-fbounds-old@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
+
+    if IS_NEW_SITE_STATS:
+        fbounds_sites1_stats_new=do_stats(fbounds_sites1_new, "of FG-sites (from new interaction order params)", is_fraction=True)
+        fbounds_sites2_stats_new=do_stats(fbounds_sites2_new, "of float-sites (from new interaction order params)", is_fraction=True)
+        kDs_dict_from_fbounds_new={}
+        for key in fbounds_sites1_stats_new.iterkeys():
+            if not re.search("fg0 - kap20", key):
+                continue
+            # A is FG sites and B is kap sites
+            EPS=1E-9
+            B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
+            fboundA= max(min(fbounds_sites1_stats_new[key][0],1.0), EPSILON) # [AB]/[A0]
+            fboundB= max(min(fbounds_sites2_stats_new[key][0],1.0), EPSILON) # [AB]/[B0]
+            A_per_AB= (1-fboundA)/(fboundA) # [A]/[AB]
+            B= (1-fboundB)*B0 # [B]
+            kD = A_per_AB * B # [A]*[B]/[AB]
+            print key, "kD from fraction bound %.2e [M] NEW" % kD
+            if(kD<=0.0):
+                continue
+            kDs_dict_from_fbounds_new[key]=[kD,-1.0,-1.0]
+        [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_new, "fg0 - kap20")
+        if not math.isnan(dH) and not math.isnan(dS):
+            T= 297.15
+            print "fg0-kap20 site-site-from-fbounds-new@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
+
+
+
+    # [A][B]/[AB] = [A][B]/([B0]-[B]) = [A][B]/([A0]-[A])
+
+    #print on_stats_ii
+    kDs_kaps_FGMs_dict={}
+    for key in on_stats_i.keys():
+        try:
+            if not key in on_stats_i or not key in off_stats_i:
+                continue
+            [k_on_i, k_on_i_low, k_on_i_high]=  get_k_low_high(on_stats_i[key])
+            [k_off_i, k_off_i_low, k_off_i_high]=  get_k_low_high(off_stats_i[key])
+            if k_on_i<=0.0 or k_off_i<0.0:
+                continue
+            kd_i=k_off_i/k_on_i
+            kd_i_high= k_off_i_high/k_on_i_low
+            kd_i_low=  k_off_i_low /k_on_i_high
+            fb_i=k_on_i/(k_on_i+k_off_i)
+            fb_i_high=k_on_i_high/(k_on_i_high+k_off_i_low)
+            fb_i_low= k_on_i_low /(k_on_i_low +k_off_i_high)
+            kDs= [ x for x in [kd_i, kd_i_low, kd_i_high]]
+            print key, "kD_i %.2e [no-units] (%.2e .. %.2e)" % tuple(kDs)
+            print key, "%% bound FG individal beads estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" \
+                % (100*fb_i, 100*fb_i_low, 100*fb_i_high)
+            if not key in on_stats_ii or not key in off_stats_ii:
+                continue
+            [k_on_ii, k_on_ii_low, k_on_ii_high]=  get_k_low_high(on_stats_ii[key])
+            [k_off_ii, k_off_ii_low, k_off_ii_high]=  get_k_low_high(off_stats_ii[key])
+            if k_on_ii<=0.0 or k_off_ii<0.0:
+                continue
+            kd_ii= k_off_ii/k_on_ii
+            kd_ii_high= k_off_ii_high/k_on_ii_low
+            kd_ii_low=  k_off_ii_low /k_on_ii_high
+            fb_ii=k_on_ii/(k_on_ii+k_off_ii)
+            fb_ii_high=k_on_ii_high/(k_on_ii_high+k_off_ii_low)
+            fb_ii_low= k_on_ii_low /(k_on_ii_low +k_off_ii_high)
+            kDs= [ x for x in [kd_ii, kd_ii_low, kd_ii_high]]
+            print key, "kD_ii %.2e [no-units] (%.2e .. %.2e)" % tuple(kDs)
+            print key, "%% bound floats estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" % \
+                (100*fb_ii, 100*fb_ii_low, 100*fb_ii_high)
+            kaps_molar=N_KAPS/AVOGADRO/box_volume_L
+            bound_kaps_molar=kaps_molar/(kd_ii+1.0)
+            print "Bound kap-FG motif molar:", bound_kaps_molar
+            kDs = [bound_kaps_molar*t for t in \
+                       [kd_i*kd_ii, kd_i_low*kd_ii_low, kd_i_high*kd_ii_high]]
+            if kDs[0]<=0: # non-positive kd is necessarily an estimation error
+                print  "kD_site_site_contacts INVALID-ESTIMATE [M]"
+                continue
+            print key, "kD_kaps_FGMs %.2e [M] (%.2e .. %.2e)" % tuple(kDs)
+            print kDs
+            kDs_kaps_FGMs_dict[key]= kDs
+        except:
+            print "EXCEPTION in NTF-FGM stats of key", key
+            raise
+        pass
+    [dH,dS]= get_dH_and_dS(kDs_kaps_FGMs_dict, "fg0 - kap20")
+    if not math.isnan(dH) and not math.isnan(dS):
+        T=297.15
+        print "fg0-kap20 kap-FG@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
+
+    kDs_dict={}
+    for key in on_stats_ss.keys():
+        try:
+            if not key in on_stats_ss or not key in off_stats_ss:
+                continue
+            [k_on, k_on_low, k_on_high]=  get_k_low_high(on_stats_ss[key])
+            [k_off, k_off_low, k_off_high]=  get_k_low_high(off_stats_ss[key])
+            if k_on<=0.0 or k_off<0.0:
+                continue #(k_on can't be zero, negative means invalid)
+            kD=k_off/k_on
+            kD_high= k_off_high/k_on_low
+            kD_low=  k_off_low /k_on_high
+            fb=k_on/(k_on+k_off)
+            fb_high=k_on_high/(k_on_high+k_off_low)
+            fb_low= k_on_low /(k_on_low +k_off_high)
+    #        if box_volume_L is None:
+    #            print "box_volume_L not set for some reasom"
+    #            box_volume_L=814.38
+            if kD<=0: # non-positive kD is necessarily an estimation error
+                print  "kD_site_site_contacts INVALID-ESTIMATE [M]"
+                continue
+    #        bound_sites_molar=[4*kaps_molar/(t+1.0) for t in kDs] # Need to correct for FG concentration
+            kDs_dict[key]= [ x/AVOGADRO/box_volume_L for x in [kD, kD_low, kD_high]]
+            print key, "kD_site_site_contacts %.2e [M] (%.2e .. %.2e)" % tuple(kDs_dict[key]),
+            T=get_temperature_from_key(key)
+            dG= math.log(kDs_dict[key][0])*kB_kcal_per_mol_K*T
+            print "dG %.2f" % dG
+            print "HI"
+    #        print key, "%% bound site-site contacts estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" % (100*fb, 100*fb_low, 100*fb_high)
+        except:
+            print "EXCEPTION in site-site stats of key", key
+            raise
+        print kD,T,dG
+        pass
+
+    do_stats(energy, "kcal/mol", is_fraction=False)
+
+    [dH,dS]= get_dH_and_dS(kDs_dict, "fg0 - kap20")
+    if not math.isnan(dH) and not math.isnan(dS):
+        T= 297.15
+        print "fg0-kap20 site-site@%.2fK dH %.2f dS %.2e dS*T %.2f dG %.2f [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
+
+    chain_kDs_from_float={}
+    fbounds1_floats_stats= do_stats(fbounds1_floats, "%FGs bound (from float stats)", is_fraction=True)
+    fbounds2_floats_stats= do_stats(fbounds2_floats, "%floats bound (from float stats)", is_fraction=True)
+    fg_chains_molar=N_FGS/AVOGADRO/box_volume_L
+    for key in fbounds2_floats_stats.keys():
+        fb1=fbounds1_floats_stats[key][0]
+        fb2=fbounds2_floats_stats[key][0]
+        fb1= max(min(fb1, 1-EPSILON), EPSILON)
+        fb2= max(min(fb2, 1-EPSILON), EPSILON)
+        ffree_1= 1.0-fb1
+        ffree_2= 1.0-fb2
+    #    print("DEBUG", fb1, fb2, ffree_1, ffree_2)
+        kD = fg_chains_molar*ffree_1*ffree_2/fb2
+        chain_kDs_from_float[key]=[kD,-1,-1]
+        print key, "kD_chain_interactions %.2e [M]" % kD
+    [dH,dS]= get_dH_and_dS(chain_kDs_from_float, "fg0 - kap20")
+    if not math.isnan(dH) and not math.isnan(dS):
+        print "fg0-kap20 chains@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
+
+    do_stats(mean_rg, "A",
+             is_fraction=False, prefix="Rg")
+    do_stats_stddev(mean_rg, mean_rg2, "A",
+                    is_fraction=False, prefix="Rg")
+    do_stats(mean_dmax, "A",
+             is_fraction=False, prefix="Dmax")
+    do_stats_stddev(mean_dmax, mean_dmax2, "A",
+                    is_fraction=False, prefix="Dmax")
+    do_stats(mean_bond_rest_length, "A",
+             is_fraction=False, prefix="bond-rest-length")
+    do_stats_stddev(mean_bond_rest_length,
+                    mean_bond_rest_length2,
+                    "A",
+                    is_fraction=False,
+                    prefix="bond-rest-length")
+
+def main():
+    print sys.argv
+    fnames= [sys.argv[1]] # set(glob.glob(sys.argv[1]))#+"*.pb"))
+    STATS_FROM_SEC= float(sys.argv[2]) # start stats after specified seconds
+    do_all_stats(fnames, STATS_FROM_SEC)
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    try:
+        main()
+    except:
+        print('%s: %s' % (sys.argv[0], traceback.format_exc()))
+        sys.exit(-1)
