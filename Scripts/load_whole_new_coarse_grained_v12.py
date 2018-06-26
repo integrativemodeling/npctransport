@@ -17,6 +17,7 @@ import IMP.core
 import IMP.rmf
 import IMP.algebra
 import RMF
+import copy
 import math
 import re
 import sys
@@ -86,6 +87,8 @@ def parse_commandline():
                         default=2.0)
     parser.add_argument('--write_obstacles_voxel_map', action='store_true',
                         help='write obstacle voxel map after loading RMF file')
+    parser.add_argument('--advanced_include_Nup2', action='store_true',
+                        help='include Nup2 in configuration file')
     args = parser.parse_args()
     return args
 
@@ -248,6 +251,7 @@ def is_anchor_node(node, fgs_regions_to_params):
         res_to  ==anchor_fgp.res_to
 
 def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
+    global args
     # TODO: adjust motif density in different nups, rg?
     fgs_regions_to_params={}
     nan= float('nan')
@@ -343,6 +347,15 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     fgs_regions_to_params['GLFG_generic']= {
         '': default_GLFG.get_copy(1, 120),
     }
+    if args.advanced_include_Nup2:
+        # Nup2 - FG regions 180-560 or so; RanBP1 -583-720 or so; Importin alpha binding - 1-70 or so ; predicted order according to Timney 2016, ~71-180; ~580-720
+        fgs_regions_to_params['Nup2']= {
+            # Not sure what to do about 1-182 so skipping
+            '': default_FSFG.get_copy(183, 562),
+            's': default_disordered_fgp.get_copy(563, 582),
+            'anchor': FGParamsFactory(res_from=583, res_to=720) # fake anchor cause using Nup60 as anchor, but just for reference , using RanBP1 domain
+        }
+
 
     return fgs_regions_to_params
 
@@ -535,7 +548,7 @@ def handle_xyz_children(config, parent, fg_params):
                 if radius in obstacles:
                     obstacles[radius].append(coords_i)
                 else:
-                    obstacles[radius]=[coords_i]
+                    obstacles[radius]= [coords_i]
 
 def get_all_anchor_coords():
     global fgs_to_anchor_coords
@@ -844,6 +857,9 @@ if(args.only_nup is not None):
     IS_SCAFFOLD_AND_PORE=False
 if IS_SCAFFOLD_AND_PORE:
     add_obstacles_from_rmf(config, args.input_rmf_file, fgs_regions_to_params)
+if args.advanced_include_Nup2:
+    fgs_to_anchor_coords['Nup2']= [IMP.algebra.Vector3D(coord) \
+                                   for coord in fgs_to_anchor_coords['Nup60']]
 #print("FGs to anchor keys", fgs_to_anchor_coords.keys())
 for (name,coords) in fgs_regions_to_params.iteritems(): # TODO: get coords right
     apply_anchor= IS_SCAFFOLD_AND_PORE
