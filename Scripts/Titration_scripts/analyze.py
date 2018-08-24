@@ -31,13 +31,14 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
     assert(False)
 
 def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
+    assert(re.match('fg', type0) and re.match('kap', type1))
     output= Output()
     params=grid_params.GridParams()
     with open(output_file, "rb") as f:
         output.ParseFromString(f.read())
     assign= output.assignment
     box_side= assign.box_side.value
-    assert( assign.fgs[0].type=type0 &&
+    assert( assign.fgs[0].type == type0 and
             assign.floaters[0].type == type1 )
     n_kaps= assign.floaters[0].number.value
     n_fgs= assign.fgs[0].number.value
@@ -54,18 +55,17 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
                                                                           kap_range,
                                                                           params.QuadraticLogKDParams)
     [KDs_dicts, KDs_dicts_new]= kstats.do_all_stats([output_file], 0.1e-6, verbose=False)
-    KDs_dict= get_KDs_from_dict(KDs_dicts, 'fg0', 'kap20')
-    KDs_dict_new= get_KDs_from_dict(KDs_dicts_new, 'fg0', 'kap20')
-    print(KDs_dict_new)
+    KDs_dict= get_KDs_from_dict(KDs_dicts, type0, type1)
+    KDs_dict_new= get_KDs_from_dict(KDs_dicts_new, type0, type1)
     entry= { 'box_side_A': box_side,
              'n_kaps': n_kaps,
              'n_fgs': n_fgs,
              'fg_seq': fg_seq,
              'kap_valency': assign.floaters[0].interactions.value,
-             'KD': KDs_dict[0],
-             'fbound_sites_A': KDs_dict_new['fboundA'],
-             'fbound_sites_B': KDs_dict_new['fboundB'],
-             'KD_sites': KDs_dict_new['KD'],
+             'KD_sites_M_from_konoff': KDs_dict[0],
+             'fbound_sites_fg': KDs_dict_new['fboundA'],
+             'fbound_sites_kap': KDs_dict_new['fboundB'],
+             'KD_sites_M_from_fbound': KDs_dict_new['KD'],
              'input_site_KD': input_site_KD,
              'k_on_per_ns_per_missing_ss_contact': KDs_dict_new['k_on_per_ns_per_missing_ss_contact'],
              'k_off_per_ns': KDs_dict_new['k_off_per_ns_per_ss_contact']
@@ -75,26 +75,25 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
 
 if __name__ != "__main__":
     sys.exit(-1)
+data= []
 for fg_seq in ['FFFFSS', 'FSSSSS']:
     output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
-    print("processing {:d} output files".format(len(output_files)))
-    data= []
+    print("Processing {:d} output files".format(len(output_files)))
     for output_file in output_files:
         try:
             stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20')
             data.append(stats_entry)
         except:
-            print("Skipping file {}".format(output_file))
+            print("Skipped {}".format(output_file))
             raise
         print("Processed {}".format(output_file))
-        break
-    columns= ['box_side_A', 'n_kaps', 'n_fgs', 'fg_seq', 'kap_valency',
-              'KD', 'fbound_sites_A', 'fbound_sites_B', 'KD_sites']
-    df= pd.DataFrame(columns=columns)
-    df= df.append(data, ignore_index=True)
-    df['kap_C']= get_concentration(df['n_kaps'], df['box_side_A'])
-    df['fg_C']= get_concentration(df['n_fgs'], df['box_side_A'])
-    df['k_on_per_ns_per_M']:
-    print(df.head().to_string())
+#        break
+columns= ['box_side_A', 'n_kaps', 'n_fgs', 'fg_seq', 'kap_valency']
+df= pd.DataFrame(data=data)
+df['kap_C_M']= get_concentration(df['n_kaps'], df['box_side_A'])
+df['fg_C_M']= get_concentration(df['n_fgs'], df['box_side_A'])
+df['k_on_per_ns_per_M']= df['k_on_per_ns_per_missing_ss_contact'] * AVOGADRO * df['box_side_A']**3 * L_per_A3
+df.to_csv(path_or_buf='stats.csv', sep=' ')
+#    print(df.head().to_string())
 
 print("Finished succesfully")
