@@ -32,10 +32,13 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
 
 def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
     assert(re.match('fg', type0) and re.match('kap', type1))
-    output= Output()
-    params=grid_params.GridParams()
-    with open(output_file, "rb") as f:
-        output.ParseFromString(f.read())
+    [KDs_dicts, KDs_dicts_new, outputs]= kstats.do_all_stats([output_file],
+                                                             0.1e-6,
+                                                             verbose=False,
+                                                             return_outputs=True)
+    KDs_dict= get_KDs_from_dict(KDs_dicts, type0, type1)
+    KDs_dict_new= get_KDs_from_dict(KDs_dicts_new, type0, type1)
+    output= outputs[0]
     assign= output.assignment
     box_side= assign.box_side.value
     assert( assign.fgs[0].type == type0 and
@@ -51,12 +54,10 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
             kap_range= assign.interactions[0].interaction_range.value
             kap_k= assign.interactions[0].interaction_k.value
     assert(kap_range is not None and kap_k is not None)
+    params=grid_params.GridParams()
     input_site_KD= create_configs.compute_KD_from_k_r_and_quadratic_model(kap_k,
                                                                           kap_range,
                                                                           params.QuadraticLogKDParams)
-    [KDs_dicts, KDs_dicts_new]= kstats.do_all_stats([output_file], 0.1e-6, verbose=False)
-    KDs_dict= get_KDs_from_dict(KDs_dicts, type0, type1)
-    KDs_dict_new= get_KDs_from_dict(KDs_dicts_new, type0, type1)
     entry= { 'box_side_A': box_side,
              'n_kaps': n_kaps,
              'n_fgs': n_fgs,
@@ -73,27 +74,53 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
     return entry
 
 
+def put_data_in_csv_file(data, filename):
+    ''' append if file exists already '''
+    if(len(data)==0):
+        return
+    df= pd.DataFrame(data=data)
+    df['kap_C_M']= get_concentration(df['n_kaps'], df['box_side_A'])
+    df['fg_C_M']= get_concentration(df['n_fgs'], df['box_side_A'])
+    df['k_on_per_ns_per_M']= df['k_on_per_ns_per_missing_ss_contact'] * AVOGADRO * df['box_side_A']**3 * L_per_A3
+    if os.path.exists(filename):
+        open_mode='a'
+        is_header= False
+    else:
+        open_mode='w'
+        is_header= True
+    with open(filename, open_mode) as f:
+        df.to_csv(path_or_buf=f,
+                  sep=' ',
+                  header= is_header)
+#    print(df.head().to_string())
+
+
 if __name__ != "__main__":
     sys.exit(-1)
+if len(sys.argv)>1:
+    stats_csv_file=sys.argv[1]
+else:
+    stats_csv_file='stats.csv'
+if os.path.exists(stats_csv_file):
+    os.remove(stats_csv_file)
 data= []
-for fg_seq in ['FFFFSS', 'FSSSSS']:
+MAX_DATA_ENTRIES= 500
+for fg_seq in ['FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
     output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
     print("Processing {:d} output files".format(len(output_files)))
     for output_file in output_files:
         try:
             stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20')
             data.append(stats_entry)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except:
             print("Skipped {}".format(output_file))
             raise
         print("Processed {}".format(output_file))
-#        break
-columns= ['box_side_A', 'n_kaps', 'n_fgs', 'fg_seq', 'kap_valency']
-df= pd.DataFrame(data=data)
-df['kap_C_M']= get_concentration(df['n_kaps'], df['box_side_A'])
-df['fg_C_M']= get_concentration(df['n_fgs'], df['box_side_A'])
-df['k_on_per_ns_per_M']= df['k_on_per_ns_per_missing_ss_contact'] * AVOGADRO * df['box_side_A']**3 * L_per_A3
-df.to_csv(path_or_buf='stats.csv', sep=' ')
-#    print(df.head().to_string())
+        if len(data)>MAX_DATA_ENTRIES:
+            put_data_in_csv_file(data, stats_csv_file)
+            data=[]
+put_data_in_csv_file(data, stats_csv_file)
 
 print("Finished succesfully")

@@ -220,7 +220,7 @@ def get_dH_and_dS2(kDs_dict, key_suffix):
 
 ############# Main ############
 
-def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
+def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
     #TEMPERATURE_K_INDEX=int(sys.argv[3])
     N_KAPS=None # Will be updated from assignment (should be consistent among inputs)
     N_SITES_PER_KAP=None # Will be updated from assignment (should be consistent among inputs)
@@ -255,6 +255,10 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
     total_sim_time_sec=0.0
     #modulus = int(sys.argv[2])
     indexed_fields=None # indexed fields that need to be the same for all output files
+    if return_outputs is not None and return_outputs==True:
+        return_outputs= []
+    else:
+        return_outputs= None
     for fname in fnames:
         if(not os.path.isfile(fname)):
             print("Skipping {} - not exists or not a regular file".format(fname))
@@ -272,6 +276,8 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
         except:
             print "Warning: EXCEPTION ", fname
             continue
+        if return_outputs is not None:
+            return_outputs.append(output)
         if(len(output.statistics.global_order_params)<2):
             print("Warning: skipping file {} - does not contain proper statistics".format(fname))
             continue
@@ -315,7 +321,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
         #             was_bound=is_bound
         #             time_state=0.0
         #         else:
-        #             time_state=time_state+1
+       #             time_state=time_state+1
         ii=0
         assert(len(output.assignment.fgs)==1)
         assert(len(output.assignment.floaters)==1)
@@ -602,7 +608,6 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
             if re.search("fg0 - kap20", key):
                 ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact']= k_on
                 ret_value_new_sites[key]['k_off_per_ns_per_ss_contact']= k_off
-                print("HI")
             T=get_temperature_from_key(key)
             dG= math.log(kDs_dict[key][0])*kB_kcal_per_mol_K*T
             if verbose:
@@ -661,7 +666,10 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True):
                     prefix="bond-rest-length",
                     verbose=verbose)
     try:
-        return ret_value, ret_value_new_sites
+        if return_outputs is None:
+            return ret_value, ret_value_new_sites
+        else:
+            return ret_value, ret_value_new_sites, return_outputs
     except:
         pass
 
