@@ -505,9 +505,9 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             if(kD<=0.0):
                 continue
             kDs_dict_from_fbounds_new[key]=[kD,-1.0,-1.0]
-            ret_value_new_sites[key]['fboundA']= fboundA
-            ret_value_new_sites[key]['fboundB']= fboundB
-            ret_value_new_sites[key]['KD']= kD
+            ret_value_new_sites[key]['fbound_sitesA']= fboundA
+            ret_value_new_sites[key]['fbound_sitesB']= fboundB
+            ret_value_new_sites[key]['KD_sites']= kD
         [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_new, "fg0 - kap20")
         if not math.isnan(dH) and not math.isnan(dS):
             T= 297.15
@@ -620,7 +620,9 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             print kD,T,dG
         pass
 
-    do_stats(energy, "kcal/mol", is_fraction=False, verbose=verbose)
+    energy_stats= do_stats(energy, "kcal/mol", is_fraction=False, verbose=verbose)
+    if ret_value_new_sites is not None:
+        ret_value_new_sites["energy"]= energy_stats["energy"]
 
     [dH,dS]= get_dH_and_dS(kDs_dict, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
@@ -645,6 +647,10 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         chain_kDs_from_float[key]=[kD,-1,-1]
         if verbose:
             print key, "kD_chain_interactions {}".format(pretty_molarity(kD))
+        if key in ret_value_new_sites:
+            ret_value_new_sites[key]["fbound_chainsA"]= fb1
+            ret_value_new_sites[key]["fbound_chainsB"]= fb2
+            ret_value_new_sites[key]["KD_chains"]= kD
     [dH,dS]= get_dH_and_dS(chain_kDs_from_float, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
         print "fg0-kap20 chains@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
