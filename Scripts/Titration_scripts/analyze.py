@@ -121,7 +121,7 @@ for fg_seq in ['FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
             raise
         except:
             print("Skipped {}".format(output_file))
-            raise
+#            raise
         print("Processed {}".format(output_file))
         if len(data)>MAX_DATA_ENTRIES:
             put_data_in_csv_file(data, stats_csv_file)
