@@ -76,6 +76,11 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
              'energy_kcal_per_mole': KDs_dicts_new['energy'][0]
 
          }
+    for key, value in KDs_dicts_new.iteritems():
+        if re.match("Rg", key):
+            entry[key]= value
+        if re.match("dmax", key):
+            entry[key]= value
     return entry
 
 

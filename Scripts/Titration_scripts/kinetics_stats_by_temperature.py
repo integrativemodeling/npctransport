@@ -394,6 +394,9 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                     accumulate_check(fbounds_sites1_new, iname, fbound_sites1_new, 1)
                     fbound_sites2_new= iop.avg_fraction_bound_particle_sites_ii
                     accumulate_check(fbounds_sites2_new, iname, fbound_sites2_new, 1)
+                    print("DEBUG: {:} {:.3f} {:.3f}".format(iname,
+                                                            fbound_sites1_new,
+                                                            fbound_sites2_new))
 
                 ii=ii+1
         for fg in output.statistics.fgs:
@@ -655,12 +658,18 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
         print "fg0-kap20 chains@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
 
-    do_stats(mean_rg, "A",
+    mean_rg_stats= do_stats(mean_rg, "A",
              is_fraction=False, prefix="Rg", verbose=verbose)
+    if ret_value_new_sites is not None:
+        for key in mean_rg_stats:
+            ret_value_new_sites["Rg_{}".format(key)]= mean_rg_stats[key][0]
     do_stats_stddev(mean_rg, mean_rg2, "A",
                     is_fraction=False, prefix="Rg", verbose=verbose)
-    do_stats(mean_dmax, "A",
+    mean_dmax_stats= do_stats(mean_dmax, "A",
              is_fraction=False, prefix="Dmax", verbose=verbose)
+    if ret_value_new_sites is not None:
+        for key in mean_dmax_stats:
+            ret_value_new_sites["dmax_{}".format(key)]= mean_dmax_stats[key][0]
     do_stats_stddev(mean_dmax, mean_dmax2, "A",
                     is_fraction=False, prefix="Dmax", verbose=verbose)
     do_stats(mean_bond_rest_length, "A",
