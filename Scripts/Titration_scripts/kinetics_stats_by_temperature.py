@@ -632,29 +632,43 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         T= 297.15
         print "fg0-kap20 site-site@%.2fK dH %.2f dS %.2e dS*T %.2f dG %.2f [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
 
-    chain_kDs_from_float={}
+    chain_KDs_from_float={}
     fbounds1_floats_stats= do_stats(fbounds1_floats, "%FGs bound (from float stats)",
                                     is_fraction=True, verbose=verbose)
     fbounds2_floats_stats= do_stats(fbounds2_floats, "%floats bound (from float stats)",
                                     is_fraction=True, verbose=verbose)
     fg_chains_molar=N_FGS/AVOGADRO/box_volume_L
     for key in fbounds2_floats_stats.keys():
-        fb1=fbounds1_floats_stats[key][0]
-        fb2=fbounds2_floats_stats[key][0]
-        fb1= max(min(fb1, 1-EPSILON), EPSILON)
-        fb2= max(min(fb2, 1-EPSILON), EPSILON)
-        ffree_1= 1.0-fb1
-        ffree_2= 1.0-fb2
-    #    print("DEBUG", fb1, fb2, ffree_1, ffree_2)
-        kD = fg_chains_molar*ffree_1*ffree_2/fb2
-        chain_kDs_from_float[key]=[kD,-1,-1]
+        fb1_list=fbounds1_floats_stats[key]
+        fb2_list=fbounds2_floats_stats[key]
+        fb1= max(min(fb1_list[0], 1-EPSILON), EPSILON)
+        fb2= max(min(fb2_list[0], 1-EPSILON), EPSILON)
+        fb1conf95= fb1_list[1]*1.96
+        fb2conf95= fb2_list[1]*1.96
+        fb1low=  max(min(fb1-fb1conf95, 1-1.5*EPSILON), 0.5*EPSILON)
+        fb2low=  max(min(fb2-fb2conf95, 1-1.5*EPSILON), 0.5*EPSILON)
+        fb1high= max(min(fb1+fb1conf95, 1-0.5*EPSILON), 1.5*EPSILON)
+        fb2high= max(min(fb2+fb2conf95, 1-0.5*EPSILON), 1.5*EPSILON)
+        print(fb1,fb1low, fb1high)
+        print(fb2,fb2low, fb2high)
+        KD =    fg_chains_molar * (1-fb1)     * (1.0-fb2)   / fb2    # [Afree]*[Bfree]/[AB]
+        KDlow=  fg_chains_molar * (1-fb1high) * (1-fb2high) / fb2high
+        KDhigh= fg_chains_molar * (1-fb1low) * (1-fb2low) / fb2low
+        chain_KDs_from_float[key]=[KD,KDlow, KDhigh]
         if verbose:
-            print key, "kD_chain_interactions {}".format(pretty_molarity(kD))
+            print key, "kD_chain_interactions {} ({}..{})".format\
+                (*[pretty_molarity(xx) for xx in (KD, KDlow, KDhigh)])
         if key in ret_value_new_sites:
             ret_value_new_sites[key]["fbound_chainsA"]= fb1
             ret_value_new_sites[key]["fbound_chainsB"]= fb2
-            ret_value_new_sites[key]["KD_chains"]= kD
-    [dH,dS]= get_dH_and_dS(chain_kDs_from_float, "fg0 - kap20")
+            ret_value_new_sites[key]["fbound_chainsA_lbound"]= fb1low
+            ret_value_new_sites[key]["fbound_chainsB_lbound"]= fb2low
+            ret_value_new_sites[key]["fbound_chainsA_ubound"]= fb1high
+            ret_value_new_sites[key]["fbound_chainsB_ubound"]= fb2high
+            ret_value_new_sites[key]["KD_chains"]= KD
+            ret_value_new_sites[key]["KD_chains_lbound"]= KDlow
+            ret_value_new_sites[key]["KD_chains_ubound"]= KDhigh
+    [dH,dS]= get_dH_and_dS(chain_KDs_from_float, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
         print "fg0-kap20 chains@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
 

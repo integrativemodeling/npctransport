@@ -64,6 +64,8 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
              'fg_seq': fg_seq,
              'kap_valency': assign.floaters[0].interactions.value,
              'KD_sites_M_from_konoff': KDs_dict[0],
+             'KD_sites_M_from_konoff_lbound': KDs_dict[1],
+             'KD_sites_M_from_konoff_ubound': KDs_dict[2],
              'fbound_sites_fg': KDs_dict_new['fbound_sitesA'],
              'fbound_sites_kap': KDs_dict_new['fbound_sitesB'],
              'KD_sites_M_from_fbound': KDs_dict_new['KD_sites'],
@@ -73,6 +75,8 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
              'fbound_chains_fg': KDs_dict_new['fbound_chainsA'],
              'fbound_chains_kap': KDs_dict_new['fbound_chainsB'],
              'KD_chains_M_from_fbound': KDs_dict_new['KD_chains'],
+             'KD_chains_M_from_fbound_lbound': KDs_dict_new['KD_chains_lbound'],
+             'KD_chains_M_from_fbound_ubound': KDs_dict_new['KD_chains_ubound'],
              'energy_kcal_per_mole': KDs_dicts_new['energy'][0]
 
          }
