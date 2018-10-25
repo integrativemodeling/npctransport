@@ -394,9 +394,9 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                     accumulate_check(fbounds_sites1_new, iname, fbound_sites1_new, 1)
                     fbound_sites2_new= iop.avg_fraction_bound_particle_sites_ii
                     accumulate_check(fbounds_sites2_new, iname, fbound_sites2_new, 1)
-                    print("DEBUG: {:} {:.3f} {:.3f}".format(iname,
-                                                            fbound_sites1_new,
-                                                            fbound_sites2_new))
+#                    print("DEBUG: {:} {:.3f} {:.3f}".format(iname,
+#                                                            fbound_sites1_new,
+#                                                            fbound_sites2_new))
 
                 ii=ii+1
         for fg in output.statistics.fgs:

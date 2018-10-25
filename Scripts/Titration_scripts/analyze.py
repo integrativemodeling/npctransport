@@ -119,7 +119,7 @@ if os.path.exists(stats_csv_file):
     os.remove(stats_csv_file)
 data= []
 MAX_DATA_ENTRIES= 500
-for fg_seq in ['FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
+for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
     output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
     print("Processing {:d} output files".format(len(output_files)))
     for output_file in output_files:
