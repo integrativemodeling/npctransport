@@ -500,32 +500,33 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
             fbA= max(min(fbounds_sites1_stats_new[key][0],1.0), EPSILON) # [AB]/[A0]
             fbB= max(min(fbounds_sites2_stats_new[key][0],1.0), EPSILON) # [AB]/[B0]
-            fbA_conf95= fbounds_sites1_stats_new[key][0]*1.96
-            fbB_conf95= fbounds_sites2_stats_new[key][0]*1.96
-            fbAlow=  max(min(fbA-fbAconf95, 1-1.5*EPSILON), 0.5*EPSILON)
-            fbAhigh= max(min(fbA+fbAconf95, 1-0.5*EPSILON), 1.5*EPSILON)
-            fbBlow=  max(min(fbB-fbBconf95, 1-1.5*EPSILON), 0.5*EPSILON)
-            fbBhigh= max(min(fbB+fbBconf95, 1-0.5*EPSILON), 1.5*EPSILON)
+            conf95_factor= get_sems_for_conf(0.95)
+            fbA_conf95= fbounds_sites1_stats_new[key][1] * conf95_factor
+            fbB_conf95= fbounds_sites2_stats_new[key][1] * conf95_factor
+            fbA_low=  max(min(fbA-fbA_conf95, 1-1.5*EPSILON), 0.5*EPSILON)
+            fbA_high= max(min(fbA+fbA_conf95, 1-0.5*EPSILON), 1.5*EPSILON)
+            fbB_low=  max(min(fbB-fbB_conf95, 1-1.5*EPSILON), 0.5*EPSILON)
+            fbB_high= max(min(fbB+fbB_conf95, 1-0.5*EPSILON), 1.5*EPSILON)
 #            A_per_AB= (1-fbA)/(fbA) # [A]/[AB]
 #            B= (1-fbB)*B0 # [B]
 #            KD =    A_per_AB * B # [A]*[B]/[AB]
             KD=     B0 * (1-fbA) * (1-fbB) / fbA
-            KDlow=  B0 * (1-fbAhigh) * (1-fbBhigh) / fbAhigh
-            KDhigh= B0 * (1-fbAlow) * (1-fbBlow) / fbAlow
+            KD_low=  B0 * (1-fbA_high) * (1-fbB_high) / fbA_high
+            KD_high= B0 * (1-fbA_low) * (1-fbB_low) / fbA_low
             if verbose:
                 print key, "kD from fraction bound {} NEW".format(pretty_molarity(kD))
             if(KD<=0.0):
                 continue
-            kDs_dict_from_fbounds_new[key]=[kD,-1.0,-1.0]
+            kDs_dict_from_fbounds_new[key]=[KD,-1.0,-1.0]
             ret_value_new_sites[key]['fbound_sitesA']= fbA
-            ret_value_new_sites[key]['fbound_sitesA_lbound']= fbAlow
-            ret_value_new_sites[key]['fbound_sitesA_ubound']= fbAhigh
+            ret_value_new_sites[key]['fbound_sitesA_lbound']= fbA_low
+            ret_value_new_sites[key]['fbound_sitesA_ubound']= fbA_high
             ret_value_new_sites[key]['fbound_sitesB']= fbB
-            ret_value_new_sites[key]['fbound_sitesB_lbound']= fbBlow
-            ret_value_new_sites[key]['fbound_sitesB_ubound']= fbBhigh
+            ret_value_new_sites[key]['fbound_sitesB_lbound']= fbB_low
+            ret_value_new_sites[key]['fbound_sitesB_ubound']= fbB_high
             ret_value_new_sites[key]['KD_sites']= KD
-            ret_value_new_sites[key]['KD_sites_lbound']= KDlow
-            ret_value_new_sites[key]['KD_sites_ubound']= KDhigh
+            ret_value_new_sites[key]['KD_sites_lbound']= KD_low
+            ret_value_new_sites[key]['KD_sites_ubound']= KD_high
 
         [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_new, "fg0 - kap20")
         if not math.isnan(dH) and not math.isnan(dS):
@@ -663,11 +664,12 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         fb2_list=fbounds2_floats_stats[key]
         fb1= max(min(fb1_list[0], 1-EPSILON), EPSILON)
         fb2= max(min(fb2_list[0], 1-EPSILON), EPSILON)
-        fb1conf95= fb1_list[1]*1.96
-        fb2conf95= fb2_list[1]*1.96
+        conf95_factor= get_sems_for_conf(0.95)
+        fb1conf95= fb1_list[1]*conf95_factor
+        fb2conf95= fb2_list[1]*conf95_factor
         fb1low=  max(min(fb1-fb1conf95, 1-1.5*EPSILON), 0.5*EPSILON)
-        fb2low=  max(min(fb2-fb2conf95, 1-1.5*EPSILON), 0.5*EPSILON)
         fb1high= max(min(fb1+fb1conf95, 1-0.5*EPSILON), 1.5*EPSILON)
+        fb2low=  max(min(fb2-fb2conf95, 1-1.5*EPSILON), 0.5*EPSILON)
         fb2high= max(min(fb2+fb2conf95, 1-0.5*EPSILON), 1.5*EPSILON)
 #        print(fb1,fb1low, fb1high)
 #        print(fb2,fb2low, fb2high)
@@ -718,7 +720,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         if return_outputs is None:
             return ret_value, ret_value_new_sites
         else:
-            return ret_value, ret_value_new_sites, returnn_outputs
+            return ret_value, ret_value_new_sites, return_outputs
     except:
         pass
 

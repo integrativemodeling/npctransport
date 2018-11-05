@@ -9,7 +9,7 @@
 # Date last udpated: Mar 3, 2018 or later
 #########################################
 from __future__ import print_function
-from FGParamsFactory import *
+from FGParams import *
 import my_util
 from IMP.npctransport import *
 import IMP.atom
@@ -17,15 +17,17 @@ import IMP.core
 import IMP.rmf
 import IMP.algebra
 import RMF
-import copy
-import math
-import re
-import sys
-import pandas as pd
 import argparse
-import numpy as np
+import ast
 from collections import OrderedDict
 from collections import defaultdict
+import copy
+import json
+import math
+import numpy as np
+import pandas as pd
+import re
+import sys
 import my_util
 
 IS_TOROID= True
@@ -89,6 +91,9 @@ def parse_commandline():
                         help='write obstacle voxel map after loading RMF file')
     parser.add_argument('--advanced_include_Nup2', action='store_true',
                         help='include Nup2 in configuration file')
+    parser.add_argument('--params_file', type=str,
+                        help='json file with custom parameters (advanced option)',
+                        default=None)
     args = parser.parse_args()
     return args
 
@@ -257,7 +262,7 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     nan= float('nan')
 #    SCALE_SELF_K= 0.88 # not for GLFGs for now
 #    SCALE_SELF_K_GLFG= 0.96
-    default_fgp=FGParamsFactory \
+    default_fgp=FGParams \
                  ( res_from=nan,
                    res_to= nan,
                    self_k= 1.28,
@@ -277,66 +282,84 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
     default_GLFG= default_fgp.get_copy()
     default_GLFG.self_k= 1.47
     default_GLFG.nonspec_k= 0.08
+    if args.params_file is not None:
+        with open(args.params_file) as f:
+            json_data= json.load(f)
+        if u"FGParams" in json_data:
+            json_fg_params= json_data[u"FGParams"]
+            print(json_fg_params)
+            for key, value in json_fg_params.iteritems():
+                print(key)
+                print(value)
+                if key==u"default_FSFG":
+                    print(default_FSFG)
+                    default_FSFG.update(value)
+                    print(default_FSFG)
+                if key==u"default_GLFG":
+                    print(default_GLFG)
+                    default_GLFG.update(value)
+                    print(default_GLFG)
+
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
         'C': default_FSFG.get_copy(181, 550),
         's': default_disordered_fgp.get_copy(551, 636),
-        'anchor': FGParamsFactory(res_from= 637,
+        'anchor': FGParams(res_from= 637,
                            res_to= 637)
     }
     fgs_regions_to_params['Nup100']= {
         '': default_GLFG.get_copy(1, 550),
         's':  default_disordered_fgp.get_copy(551,800),
-        'anchor': FGParamsFactory(res_from= 801,
+        'anchor': FGParams(res_from= 801,
                            res_to= 815)
     }
     fgs_regions_to_params['Nup116']= {
         '': default_GLFG.get_copy(1, 750),
         's': default_disordered_fgp.get_copy(751, 950),
-        'anchor': FGParamsFactory(res_from= 951,
+        'anchor': FGParams(res_from= 951,
                            res_to= 965)
     }
     fgs_regions_to_params['Nup159']= {
         '': default_FSFG.get_copy(442, 881,
                                         nonspec_k= 0.07),
         's': default_disordered_fgp.get_copy(882, 1116),
-        'anchor': FGParamsFactory(res_from= 1117,
+        'anchor': FGParams(res_from= 1117,
                            res_to= 1117)
     }
     if not is_remove_gle1_and_nup42:
         fgs_regions_to_params['Nup42']= {
             '': default_GLFG.get_copy(1, 363),
-            'anchor': FGParamsFactory(res_from= 364,
+            'anchor': FGParams(res_from= 364,
                                res_to= 413)
         }
     fgs_regions_to_params['Nup49']= {
         '': default_GLFG.get_copy(1, 240),
         's': default_disordered_fgp.get_copy(241, 269),
-        'anchor': FGParamsFactory(res_from= 270,
+        'anchor': FGParams(res_from= 270,
                            res_to= 270)
     }
     fgs_regions_to_params['Nup57']= {
         '': default_GLFG.get_copy(1, 200),
         's': default_disordered_fgp.get_copy(201, 286),
-        'anchor': FGParamsFactory(res_from= 287,
+        'anchor': FGParams(res_from= 287,
                            res_to= 287)
     }
     fgs_regions_to_params['Nup145']= {
         '': default_GLFG.get_copy(1, 200),
         's': default_disordered_fgp.get_copy(201,250),
-        'anchor': FGParamsFactory(res_from= 251,
+        'anchor': FGParams(res_from= 251,
                            res_to= 275)
         # Nup145Ns?
     }
     fgs_regions_to_params['Nup1']= {
-        'anchor': FGParamsFactory(res_from= 151,
+        'anchor': FGParams(res_from= 151,
                            res_to= 200),
         's': default_disordered_fgp.get_copy(201, 325),
         'm': default_FSFG.get_copy(326, 815),
         'c': default_GLFG.get_copy(816, 1076)
     }
     fgs_regions_to_params['Nup60']= {
-        'anchor': FGParamsFactory(res_from= 251,
+        'anchor': FGParams(res_from= 251,
                            res_to= 300),
         's': default_disordered_fgp.get_copy(301, 398),
         '': default_FSFG.get_copy(399, 539)
@@ -353,7 +376,7 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
             # Not sure what to do about 1-182 so skipping
             '': default_FSFG.get_copy(183, 562),
             's': default_disordered_fgp.get_copy(563, 582),
-            'anchor': FGParamsFactory(res_from=583, res_to=720) # fake anchor cause using Nup60 as anchor, but just for reference , using RanBP1 domain
+            'anchor': FGParams(res_from=583, res_to=720) # fake anchor cause using Nup60 as anchor, but just for reference , using RanBP1 domain
         }
 
 
@@ -403,7 +426,7 @@ def test_is_node_in_fg_domain():
     # assert(is_node_in_fg_domain('50', 'Nsp1_1-50_pdb', fgs_regions_to_params))
 
 def get_fg_regions_to_params_ordered(fg_regions_to_params):
-    ''' return an OrderedDict object mapping from type to FGParamsFactory,
+    ''' return an OrderedDict object mapping from type to FGParams,
         with keys sorted from either the anchor (if it exists) or from
         the type corresponding to the first residue. If anchor is C',
         res_from and res_to are reversed to reflect that

@@ -150,7 +150,7 @@ for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
-            print("Skipped {}".format(output_file))
+            print("Skipped {} due to exception - consider uncommenting 'raise' from analyze.py script".format(output_file))
 #            raise
         print("Processed {}".format(output_file))
         if len(data)>MAX_DATA_ENTRIES:

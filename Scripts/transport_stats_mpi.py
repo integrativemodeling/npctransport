@@ -109,14 +109,14 @@ def open_file(fname):
         sim_time_sec = end_sim_time_sec-max(start_sim_time_sec,STATS_FROM_SEC)
     except ValueError as e:
         print("EXCEPTION {} {}".format(fname, e))
-        raise
+        return {"fname":fname,"status":-1}
     except:
         print("EXCEPTION {}".format(fname))
-        raise
+        return {"fname":fname,"status":-1}
     if sim_time_sec<0:
         print("SKIP negative normalized sim-time {} stats from sec {}" \
               .fomrat(sim_time_sec, STATS_FROM_SEC))
-        return None
+        return {"fname":fname,"status":-1}
     Ns_dict={}
     counts_dict={}
     for floater_a in output.assignment.floaters:
@@ -131,7 +131,8 @@ def open_file(fname):
     file_summary={"fname":fname,
                   "sim_time_sec":sim_time_sec,
                   "Ns_dict": Ns_dict,
-                  "counts_dict":counts_dict}
+                  "counts_dict":counts_dict,
+                  "status":0}
     print("Opened {}".format(fname))
     return file_summary
 
@@ -148,8 +149,9 @@ def _sum_output_stats_exception(file_summary):
     global total_sim_time_sec
     cache_frequency=500
 
-    if file_summary is None:
-        print("Empty output skipped")
+    if file_summary["status"]<0:
+        print("Empty or defect output file skipped {}".format(file_summary["fname"]))
+        return
     processed_fnames.add(file_summary["fname"])
     total_sim_time_sec= total_sim_time_sec+file_summary["sim_time_sec"]
     for floater_type, floater_N in file_summary["Ns_dict"].iteritems():
@@ -174,7 +176,7 @@ def sum_output_stats(file_summary):
             print("Exception summarizing stats of {0}".format(file_summary["fname"]))
         else:
             print("Unknown exception in sum_output_stats()")
-        raise
+#        raise
 
 
 
