@@ -91,8 +91,8 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
              'KD_chains_M_from_fbound': KDs_dict_new['KD_chains'],
              'KD_chains_M_from_fbound_lbound': KDs_dict_new['KD_chains_lbound'],
              'KD_chains_M_from_fbound_ubound': KDs_dict_new['KD_chains_ubound'],
-             'energy_kcal_per_mole': KDs_dicts_new['energy'][0]
-             'energy_kcal_per_mole_lbound': KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1]
+             'energy_kcal_per_mole': KDs_dicts_new['energy'][0],
+             'energy_kcal_per_mole_lbound': KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1],
              'energy_kcal_per_mole_ubound': KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1]
 
          }
