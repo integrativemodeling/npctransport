@@ -67,17 +67,33 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
              'KD_sites_M_from_konoff_lbound': KDs_dict[1],
              'KD_sites_M_from_konoff_ubound': KDs_dict[2],
              'fbound_sites_fg': KDs_dict_new['fbound_sitesA'],
+             'fbound_sites_fg_lbound': KDs_dict_new['fbound_sitesA_lbound'],
+             'fbound_sites_fg_ubound': KDs_dict_new['fbound_sitesA_ubound'],
              'fbound_sites_kap': KDs_dict_new['fbound_sitesB'],
+             'fbound_sites_kap_lbound': KDs_dict_new['fbound_sitesB_lbound'],
+             'fbound_sites_kap_ubound': KDs_dict_new['fbound_sitesB_ubound'],
              'KD_sites_M_from_fbound': KDs_dict_new['KD_sites'],
+             'KD_sites_M_from_fbound_lbound': KDs_dict_new['KD_sites_lbound'],
+             'KD_sites_M_from_fbound_ubound': KDs_dict_new['KD_sites_ubound'],
              'input_site_KD': input_site_KD,
              'k_on_per_ns_per_missing_ss_contact': KDs_dict_new['k_on_per_ns_per_missing_ss_contact'],
+             'k_on_per_ns_per_missing_ss_contact_lbound': KDs_dict_new['k_on_per_ns_per_missing_ss_contact_lbound'],
+             'k_on_per_ns_per_missing_ss_contact_ubound': KDs_dict_new['k_on_per_ns_per_missing_ss_contact_ubound'],
              'k_off_per_ns': KDs_dict_new['k_off_per_ns_per_ss_contact'],
+             'k_off_per_ns_lbound': KDs_dict_new['k_off_per_ns_per_ss_contact_lbound'],
+             'k_off_per_ns_ubound': KDs_dict_new['k_off_per_ns_per_ss_contact_ubound'],
              'fbound_chains_fg': KDs_dict_new['fbound_chainsA'],
+             'fbound_chains_fg_lbound': KDs_dict_new['fbound_chainsA_lbound'],
+             'fbound_chains_fg_ubound': KDs_dict_new['fbound_chainsA_ubound'],
              'fbound_chains_kap': KDs_dict_new['fbound_chainsB'],
+             'fbound_chains_kap_lbound': KDs_dict_new['fbound_chainsB_lbound'],
+             'fbound_chains_kap_ubound': KDs_dict_new['fbound_chainsB_ubound'],
              'KD_chains_M_from_fbound': KDs_dict_new['KD_chains'],
              'KD_chains_M_from_fbound_lbound': KDs_dict_new['KD_chains_lbound'],
              'KD_chains_M_from_fbound_ubound': KDs_dict_new['KD_chains_ubound'],
              'energy_kcal_per_mole': KDs_dicts_new['energy'][0]
+             'energy_kcal_per_mole_lbound': KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1]
+             'energy_kcal_per_mole_ubound': KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1]
 
          }
     for key, value in KDs_dicts_new.iteritems():
@@ -95,7 +111,12 @@ def put_data_in_csv_file(data, filename):
     df= pd.DataFrame(data=data)
     df['kap_C_M']= get_concentration(df['n_kaps'], df['box_side_A'])
     df['fg_C_M']= get_concentration(df['n_fgs'], df['box_side_A'])
-    df['k_on_per_ns_per_M']= df['k_on_per_ns_per_missing_ss_contact'] * AVOGADRO * df['box_side_A']**3 * L_per_A3
+    df['k_on_per_ns_per_M']= df['k_on_per_ns_per_missing_ss_contact'] \
+        * AVOGADRO * df['box_side_A']**3 * L_per_A3
+    df['k_on_per_ns_per_M_lbound']= df['k_on_per_ns_per_missing_ss_contact_lbound'] \
+        * AVOGADRO * df['box_side_A']**3 * L_per_A3
+    df['k_on_per_ns_per_M_ubound']= df['k_on_per_ns_per_missing_ss_contact_ubound'] \
+        * AVOGADRO * df['box_side_A']**3 * L_per_A3
     if os.path.exists(filename):
         open_mode='a'
         is_header= False

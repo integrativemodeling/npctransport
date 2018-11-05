@@ -498,19 +498,35 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             # A is FG sites and B is kap sites
             EPS=1E-9
             B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
-            fboundA= max(min(fbounds_sites1_stats_new[key][0],1.0), EPSILON) # [AB]/[A0]
-            fboundB= max(min(fbounds_sites2_stats_new[key][0],1.0), EPSILON) # [AB]/[B0]
-            A_per_AB= (1-fboundA)/(fboundA) # [A]/[AB]
-            B= (1-fboundB)*B0 # [B]
-            kD = A_per_AB * B # [A]*[B]/[AB]
+            fbA= max(min(fbounds_sites1_stats_new[key][0],1.0), EPSILON) # [AB]/[A0]
+            fbB= max(min(fbounds_sites2_stats_new[key][0],1.0), EPSILON) # [AB]/[B0]
+            fbA_conf95= fbounds_sites1_stats_new[key][0]*1.96
+            fbB_conf95= fbounds_sites2_stats_new[key][0]*1.96
+            fbAlow=  max(min(fbA-fbAconf95, 1-1.5*EPSILON), 0.5*EPSILON)
+            fbAhigh= max(min(fbA+fbAconf95, 1-0.5*EPSILON), 1.5*EPSILON)
+            fbBlow=  max(min(fbB-fbBconf95, 1-1.5*EPSILON), 0.5*EPSILON)
+            fbBhigh= max(min(fbB+fbBconf95, 1-0.5*EPSILON), 1.5*EPSILON)
+#            A_per_AB= (1-fbA)/(fbA) # [A]/[AB]
+#            B= (1-fbB)*B0 # [B]
+#            KD =    A_per_AB * B # [A]*[B]/[AB]
+            KD=     B0 * (1-fbA) * (1-fbB) / fbA
+            KDlow=  B0 * (1-fbAhigh) * (1-fbBhigh) / fbAhigh
+            KDhigh= B0 * (1-fbAlow) * (1-fbBlow) / fbAlow
             if verbose:
                 print key, "kD from fraction bound {} NEW".format(pretty_molarity(kD))
-            if(kD<=0.0):
+            if(KD<=0.0):
                 continue
             kDs_dict_from_fbounds_new[key]=[kD,-1.0,-1.0]
-            ret_value_new_sites[key]['fbound_sitesA']= fboundA
-            ret_value_new_sites[key]['fbound_sitesB']= fboundB
-            ret_value_new_sites[key]['KD_sites']= kD
+            ret_value_new_sites[key]['fbound_sitesA']= fbA
+            ret_value_new_sites[key]['fbound_sitesA_lbound']= fbAlow
+            ret_value_new_sites[key]['fbound_sitesA_ubound']= fbAhigh
+            ret_value_new_sites[key]['fbound_sitesB']= fbB
+            ret_value_new_sites[key]['fbound_sitesB_lbound']= fbBlow
+            ret_value_new_sites[key]['fbound_sitesB_ubound']= fbBhigh
+            ret_value_new_sites[key]['KD_sites']= KD
+            ret_value_new_sites[key]['KD_sites_lbound']= KDlow
+            ret_value_new_sites[key]['KD_sites_ubound']= KDhigh
+
         [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_new, "fg0 - kap20")
         if not math.isnan(dH) and not math.isnan(dS):
             T= 297.15
@@ -610,7 +626,11 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             ret_value= kDs_dict
             if re.search("fg0 - kap20", key):
                 ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact']= k_on
+                ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact_lbound']= k_on_low
+                ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact_ubound']= k_on_high
                 ret_value_new_sites[key]['k_off_per_ns_per_ss_contact']= k_off
+                ret_value_new_sites[key]['k_off_per_ns_per_ss_contact_lbound']= k_off_low
+                ret_value_new_sites[key]['k_off_per_ns_per_ss_contact_ubound']= k_off_high
             T=get_temperature_from_key(key)
             dG= math.log(kDs_dict[key][0])*kB_kcal_per_mol_K*T
             if verbose:
@@ -649,8 +669,8 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         fb2low=  max(min(fb2-fb2conf95, 1-1.5*EPSILON), 0.5*EPSILON)
         fb1high= max(min(fb1+fb1conf95, 1-0.5*EPSILON), 1.5*EPSILON)
         fb2high= max(min(fb2+fb2conf95, 1-0.5*EPSILON), 1.5*EPSILON)
-        print(fb1,fb1low, fb1high)
-        print(fb2,fb2low, fb2high)
+#        print(fb1,fb1low, fb1high)
+#        print(fb2,fb2low, fb2high)
         KD =    fg_chains_molar * (1-fb1)     * (1.0-fb2)   / fb2    # [Afree]*[Bfree]/[AB]
         KDlow=  fg_chains_molar * (1-fb1high) * (1-fb2high) / fb2high
         KDhigh= fg_chains_molar * (1-fb1low) * (1-fb2low) / fb2low
@@ -698,7 +718,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         if return_outputs is None:
             return ret_value, ret_value_new_sites
         else:
-            return ret_value, ret_value_new_sites, return_outputs
+            return ret_value, ret_value_new_sites, returnn_outputs
     except:
         pass
 
