@@ -30,10 +30,11 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
             return KDs
     assert(False)
 
-def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20'):
+def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
+                                    stats_min_time_sec= 0.1e-6):
     assert(re.match('fg', type0) and re.match('kap', type1))
     [KDs_dicts, KDs_dicts_new, outputs]= kstats.do_all_stats([output_file],
-                                                             0.1e-6,
+                                                             stats_min_time_sec,
                                                              verbose=False,
                                                              return_outputs=True)
     KDs_dict= get_KDs_from_dict(KDs_dicts, type0, type1)
@@ -136,6 +137,10 @@ if len(sys.argv)>1:
     stats_csv_file=sys.argv[1]
 else:
     stats_csv_file='stats.csv'
+if len(sys.argv)>2:
+    stats_min_time_sec= float(sys.argv[2])
+else:
+    stats_min_time_sec= 0.1e-6
 if os.path.exists(stats_csv_file):
     os.remove(stats_csv_file)
 data= []
@@ -145,7 +150,8 @@ for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
     print("Processing {:d} output files".format(len(output_files)))
     for output_file in output_files:
         try:
-            stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20')
+            stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20',
+                                                         stats_min_time_sec)
             data.append(stats_entry)
         except (KeyboardInterrupt, SystemExit):
             raise
