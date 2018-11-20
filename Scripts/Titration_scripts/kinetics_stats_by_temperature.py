@@ -176,18 +176,18 @@ def get_temperature_from_key(key, key_suffix=""):
     temperature_K=float(m.group('temperature_K'))
     return temperature_K
 
-def get_dH_and_dS(kDs_dict, key_suffix):
+def get_dH_and_dS(KDs_dict, key_suffix):
     x=[]
     y=[]
-    for key,kDs in kDs_dict.iteritems():
+    for key,KDs in KDs_dict.iteritems():
         temperature_K= get_temperature_from_key(key, key_suffix)
         if not temperature_K:
             continue
         if temperature_K<TEMP_MIN_DS or temperature_K>TEMP_MAX_DS:
             continue
         x.append(-1.0/temperature_K/kB_kcal_per_mol_K)
-        [kD, kD_low, kD_high] = kDs
-        y.append(-math.log(kD)) # natural log of kA
+        [KD, KD_low, KD_high] = KDs
+        y.append(-math.log(KD)) # natural log of kA
     # ln(kA) = dH*(-1.0/(kB*T)) + dS/kB <==> dH-dS*T = -kB*T*ln(kA) <==> dG = -kB*T*ln(kA)
     if(len(x)<=1):
         return [float('nan'),float('nan')]
@@ -195,10 +195,10 @@ def get_dH_and_dS(kDs_dict, key_suffix):
     dS=dS_per_kB*kB_kcal_per_mol_K
     return [dH,dS]
 
-def get_dH_and_dS2(kDs_dict, key_suffix):
+def get_dH_and_dS2(KDs_dict, key_suffix):
     x=[]
     y=[]
-    for key,kDs in kDs_dict.iteritems():
+    for key,KDs in KDs_dict.iteritems():
         m=re.match("(?P<temperature_K>[0-9\.]+) " + key_suffix, key)
         if not m:
             continue
@@ -206,8 +206,8 @@ def get_dH_and_dS2(kDs_dict, key_suffix):
         if temperature_K<TEMP_MIN_DS or temperature_K>TEMP_MAX_DS:
             continue
         x.append(temperature_K)
-        [kD, kD_low, kD_high] = kDs
-        y.append(math.log(kD)*kB_kcal_per_mol_K*temperature_K)
+        [KD, KD_low, KD_high] = KDs
+        y.append(math.log(KD)*kB_kcal_per_mol_K*temperature_K)
     # ln(kA) = dH*(-1.0/(kB*T)) + dS/kB <==> dH-dS*T = -kB*T*ln(kA) <==> dG = -kB*T*ln(kA)
     if len(x)<=1:
         return [float('nan'),float('nan')]
@@ -234,7 +234,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
     k_offs_ii= {}
     k_ons_ss= {} # mc = missing contact
     k_offs_ss= {}
-    kDs_chains= {}
+    KDs_chains= {}
     fbounds1_floats= {}
     fbounds2_floats= {}
     fbounds2= {}
@@ -357,7 +357,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                     fb1=0.0
                 accumulate_check(fbounds1_floats, iname, fb1, elapsed_time_ns)
                 accumulate_check(fbounds2_floats, iname, fb2, elapsed_time_ns)
-    #           print "kD@%.0f ns is %.1e" % (fop.time_ns, kD)
+    #           print "KD@%.0f ns is %.1e" % (fop.time_ns, KD)
 
         for interaction in output.statistics.interactions:
             iname = "%.2f %s - %s" % (temperature_k , interaction.type0, interaction.type1 )
@@ -461,7 +461,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                                       is_fraction=True, verbose=verbose)
     fbounds_sites2_stats_old=do_stats(fbounds_sites2_old, "of float-sites (from old interaction order params)",
                                       is_fraction=True, verbose=verbose)
-    kDs_dict_from_fbounds_old={}
+    KDs_dict_from_fbounds_old={}
     for key in fbounds_sites1_stats_old.iterkeys():
         if not re.search("fg0 - kap20", key):
             continue
@@ -472,13 +472,15 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         fboundB= max(min(fbounds_sites2_stats_old[key][0],1.0), EPSILON) # [AB]/[B0]
         A_per_AB= (1-fboundA)/(fboundA) # [A]/[AB]
         B= (1-fboundB)*B0 # [B]
-        kD = A_per_AB * B # [A]*[B]/[AB]
+        KD = A_per_AB * B # [A]*[B]/[AB]
         if verbose:
-            print key, "kD from fraction bound {} OLD".format(pretty_molarity(kD))
-        if(kD<=0.0):
+            print key, "KD calculation OLD", "[kap-sites]", pretty_molarity(B0),\
+            "%bound A", fboundA*100, "%bound B", fboundB*100
+            print key, "KD from fraction bound {} OLD".format(pretty_molarity(KD))
+        if(KD<=0.0):
             continue
-        kDs_dict_from_fbounds_old[key]=[kD,-1.0,-1.0]
-    [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_old, "fg0 - kap20")
+        KDs_dict_from_fbounds_old[key]=[KD,-1.0,-1.0]
+    [dH,dS]= get_dH_and_dS2(KDs_dict_from_fbounds_old, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS):
         T= 297.15
         if verbose:
@@ -490,7 +492,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                                           is_fraction=True, verbose=verbose)
         fbounds_sites2_stats_new=do_stats(fbounds_sites2_new, "of float-sites (from new interaction order params)",
                                           is_fraction=True, verbose=verbose)
-        kDs_dict_from_fbounds_new={}
+        KDs_dict_from_fbounds_new={}
         for key in fbounds_sites1_stats_new.iterkeys():
             if not re.search("fg0 - kap20", key):
                 continue
@@ -514,10 +516,12 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             KD_low=  B0 * (1-fbA_high) * (1-fbB_high) / fbA_high
             KD_high= B0 * (1-fbA_low) * (1-fbB_low) / fbA_low
             if verbose:
-                print key, "kD from fraction bound {} NEW".format(pretty_molarity(kD))
+                print key, "KD calculation NEW", "kap C", pretty_molarity(B0),\
+                "%bound A", fbA*100, "%bound B", fbB*100
+                print key, "KD from fraction bound {} NEW".format(pretty_molarity(KD))
             if(KD<=0.0):
                 continue
-            kDs_dict_from_fbounds_new[key]=[KD,-1.0,-1.0]
+            KDs_dict_from_fbounds_new[key]=[KD,-1.0,-1.0]
             ret_value_new_sites[key]['fbound_sitesA']= fbA
             ret_value_new_sites[key]['fbound_sitesA_lbound']= fbA_low
             ret_value_new_sites[key]['fbound_sitesA_ubound']= fbA_high
@@ -528,7 +532,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             ret_value_new_sites[key]['KD_sites_lbound']= KD_low
             ret_value_new_sites[key]['KD_sites_ubound']= KD_high
 
-        [dH,dS]= get_dH_and_dS2(kDs_dict_from_fbounds_new, "fg0 - kap20")
+        [dH,dS]= get_dH_and_dS2(KDs_dict_from_fbounds_new, "fg0 - kap20")
         if not math.isnan(dH) and not math.isnan(dS):
             T= 297.15
             print "fg0-kap20 site-site-from-fbounds-new@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
@@ -538,7 +542,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
     # [A][B]/[AB] = [A][B]/([B0]-[B]) = [A][B]/([A0]-[A])
 
     #print on_stats_ii
-    kDs_kaps_FGMs_dict={}
+    KDs_kaps_FGMs_dict={}
     for key in on_stats_i.keys():
         try:
             if not key in on_stats_i or not key in off_stats_i:
@@ -553,9 +557,9 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             fb_i=k_on_i/(k_on_i+k_off_i)
             fb_i_high=k_on_i_high/(k_on_i_high+k_off_i_low)
             fb_i_low= k_on_i_low /(k_on_i_low +k_off_i_high)
-            kDs= [ x for x in [kd_i, kd_i_low, kd_i_high]]
+            KDs= [ x for x in [kd_i, kd_i_low, kd_i_high]]
             if verbose:
-                print key, "kD_i %.2e [no-units] (%.2e .. %.2e)" % tuple(kDs)
+                print key, "KD_i %.2e [no-units] (%.2e .. %.2e)" % tuple(KDs)
                 print key, "%% bound FG individal beads estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" \
                     % (100*fb_i, 100*fb_i_low, 100*fb_i_high)
             if not key in on_stats_ii or not key in off_stats_ii:
@@ -570,35 +574,36 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             fb_ii=k_on_ii/(k_on_ii+k_off_ii)
             fb_ii_high=k_on_ii_high/(k_on_ii_high+k_off_ii_low)
             fb_ii_low= k_on_ii_low /(k_on_ii_low +k_off_ii_high)
-            kDs= [ x for x in [kd_ii, kd_ii_low, kd_ii_high]]
+            KDs= [ x for x in [kd_ii, kd_ii_low, kd_ii_high]]
             if verbose:
-                print key, "kD_ii %.2e [no-units] (%.2e .. %.2e)" % tuple(kDs)
+                print key, "KD_ii %.2e [no-units] (%.2e .. %.2e)" % tuple(KDs)
                 print key, "%% bound floats estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" % \
                     (100*fb_ii, 100*fb_ii_low, 100*fb_ii_high)
             kaps_molar=N_KAPS/AVOGADRO/box_volume_L
             bound_kaps_molar=kaps_molar/(kd_ii+1.0)
             if verbose:
                 print "Bound kap-FG motif molar:", bound_kaps_molar
-            kDs = [bound_kaps_molar*t for t in \
+            KDs = [bound_kaps_molar*t for t in \
                        [kd_i*kd_ii, kd_i_low*kd_ii_low, kd_i_high*kd_ii_high]]
-            if kDs[0]<=0: # non-positive kd is necessarily an estimation error
-                print  "kD_site_site_contacts INVALID-ESTIMATE [M]"
+            if KDs[0]<=0: # non-positive kd is necessarily an estimation error
+                print  "KD_site_site_contacts INVALID-ESTIMATE [M]"
                 continue
-            pretty_kDs= [pretty_molarity(kD) for kD in kDs]
+            pretty_KDs= [pretty_molarity(KD) for KD in KDs]
             if verbose:
-                print key, "kD_kaps_FGMs {0} ({1} .. {2})".format(*pretty_kDs)
-                print kDs
-            kDs_kaps_FGMs_dict[key]= kDs
+                print key, "KD_kaps_FGMs {0} ({1} .. {2})".format(*pretty_KDs)
+                print KDs
+            KDs_kaps_FGMs_dict[key]= KDs
         except:
             print "EXCEPTION in NTF-FGM stats of key", key
             raise
         pass
-    [dH,dS]= get_dH_and_dS(kDs_kaps_FGMs_dict, "fg0 - kap20")
+    [dH,dS]= get_dH_and_dS(KDs_kaps_FGMs_dict, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
         T=297.15
         print "fg0-kap20 kap-FG@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
 
-    kDs_dict={}
+    KDs_dict={}
+    ret_value= KDs_dict
     for key in on_stats_ss.keys():
         try:
             if not key in on_stats_ss or not key in off_stats_ss:
@@ -607,24 +612,24 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             [k_off, k_off_low, k_off_high]=  get_k_low_high(off_stats_ss[key]) # per ns per contact
             if k_on<=0.0 or k_off<0.0:
                 continue #(k_on can't be zero, negative means invalid)
-            kD=k_off/k_on
-            kD_high= k_off_high/k_on_low
-            kD_low=  k_off_low /k_on_high
+            KD=k_off/k_on
+            KD_high= k_off_high/k_on_low
+            KD_low=  k_off_low /k_on_high
             fb=k_on/(k_on+k_off)
             fb_high=k_on_high/(k_on_high+k_off_low)
             fb_low= k_on_low /(k_on_low +k_off_high)
     #        if box_volume_L is None:
     #            print "box_volume_L not set for some reasom"
     #            box_volume_L=814.38
-            if kD<=0: # non-positive kD is necessarily an estimation error
-                print  "kD_site_site_contacts INVALID-ESTIMATE [M]"
+            if KD<=0: # non-positive KD is necessarily an estimation error
+                print  "KD_site_site_contacts INVALID-ESTIMATE [M]"
                 continue
-    #        bound_sites_molar=[4*kaps_molar/(t+1.0) for t in kDs] # Need to correct for FG concentration
-            kDs_dict[key]= [ x/AVOGADRO/box_volume_L for x in [kD, kD_low, kD_high]]
-            pretty_kDs= [pretty_molarity(kD) for kD in kDs_dict[key]]
+    #        bound_sites_molar=[4*kaps_molar/(t+1.0) for t in KDs] # Need to correct for FG concentration
+            KDs_dict[key]= [ x/AVOGADRO/box_volume_L for x in [KD, KD_low, KD_high]]
+            pretty_KDs= [pretty_molarity(KD) for KD in KDs_dict[key]]
             if verbose:
-                print key, "kD_site_site_contacts {} ({} .. {})".format(*pretty_kDs)
-            ret_value= kDs_dict
+                print key, "KD_site_site_contacts {} ({} .. {})".format(*pretty_KDs)
+#            ret_value= KDs_dict
             if re.search("fg0 - kap20", key):
                 ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact']= k_on
                 ret_value_new_sites[key]['k_on_per_ns_per_missing_ss_contact_lbound']= k_on_low
@@ -633,7 +638,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
                 ret_value_new_sites[key]['k_off_per_ns_per_ss_contact_lbound']= k_off_low
                 ret_value_new_sites[key]['k_off_per_ns_per_ss_contact_ubound']= k_off_high
             T=get_temperature_from_key(key)
-            dG= math.log(kDs_dict[key][0])*kB_kcal_per_mol_K*T
+            dG= math.log(KDs_dict[key][0])*kB_kcal_per_mol_K*T
             if verbose:
                 print "dG %.2f" % dG
     #        print key, "%% bound site-site contacts estimate from k_on/k_off times %.1f%% range (%.1f%% .. %.1f%%)" % (100*fb, 100*fb_low, 100*fb_high)
@@ -641,14 +646,14 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             print "EXCEPTION in site-site stats of key", key
             raise
         if verbose:
-            print kD,T,dG
+            print KD,T,dG
         pass
 
     energy_stats= do_stats(energy, "kcal/mol", is_fraction=False, verbose=verbose)
     if ret_value_new_sites is not None:
         ret_value_new_sites["energy"]= energy_stats["energy"]
 
-    [dH,dS]= get_dH_and_dS(kDs_dict, "fg0 - kap20")
+    [dH,dS]= get_dH_and_dS(KDs_dict, "fg0 - kap20")
     if not math.isnan(dH) and not math.isnan(dS) and verbose:
         T= 297.15
         print "fg0-kap20 site-site@%.2fK dH %.2f dS %.2e dS*T %.2f dG %.2f [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
@@ -678,7 +683,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         KDhigh= fg_chains_molar * (1-fb1low) * (1-fb2low) / fb2low
         chain_KDs_from_float[key]=[KD,KDlow, KDhigh]
         if verbose:
-            print key, "kD_chain_interactions {} ({}..{})".format\
+            print key, "KD_chain_interactions {} ({}..{})".format\
                 (*[pretty_molarity(xx) for xx in (KD, KDlow, KDhigh)])
         if key in ret_value_new_sites:
             ret_value_new_sites[key]["fbound_chainsA"]= fb1
@@ -722,6 +727,7 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         else:
             return ret_value, ret_value_new_sites, return_outputs
     except:
+        raise
         pass
 
 def main():
