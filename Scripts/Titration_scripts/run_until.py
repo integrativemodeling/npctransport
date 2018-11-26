@@ -19,6 +19,16 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
             return KDs
     raise RuntimeError("Couldn't find KD in output")
 
+def try_run(cmd, max_trials=3):
+    for i in range(max_trials):
+        try:
+            subprocess.check_call(cmd, shell=True)
+            return
+        except subprocess.CalledProcessError as e:
+            print("Error running process on trial {} - message ''".format(i, e))
+            if i+1==max_trials:
+                raise
+    assert(False)
 
 if __name__ != "__main__":
     sys.exit(-1)
@@ -39,7 +49,7 @@ assert(len(Ks)>0)
 kap_k= Ks[0]
 edit_config.do_edit(config_file,'config.pb', kap_k=kap_k)
 initial_cmd= fg_sim + " --configuration config.pb --output output.pb --short_sim_factor 0.000001"
-subprocess.check_call(initial_cmd, shell=True)
+try_run(initial_cmd, max_trials=3)
 round=1
 while True:
     print("Round {}".format(round))
@@ -47,10 +57,9 @@ while True:
     os.rename('output.pb', 'prev_output.pb')
     restart_cmd= fg_sim + " --restart prev_output.pb --output output.pb --short_sim_factor {sim_time_factor}"\
         .format(sim_time_factor= sim_time_factor)
-    subprocess.check_call(restart_cmd, shell=True)
+    try_run(restart_cmd, max_trials=3)
     try:
-        kstats.do_all_stats(['output.pb'], 0.5e-6, verbose=False)
-        [KDs_dict, _] =         kstats.do_all_stats(['output.pb'], 0.0001e-6, verbose=False)
+        [KDs_dict, _] =         kstats.do_all_stats(['output.pb'], 0.5e-6, verbose=False)
         if KDs_dict is not None:
             KDs= get_KDs_from_dict(KDs_dict,'fg0','kap20')
             print(KDs_dict)
@@ -60,6 +69,8 @@ while True:
             print("Difference in log space {:.3f} {:.3f}".format(LKD[0]-LKD[1],LKD[2]-LKD[0]))
             if LKD[0]-LKD[1]<np.log10(1.2):
                 break
+        else:
+            print("Warning: Invalid KD in this round (this is normal in first few rounds)")
     except RuntimeError as e:
         print("Runtime error exception during KD optimization: '{}'".format(e))
         print("Warning couldn't get stats at round {}".format(round))

@@ -31,7 +31,8 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
     assert(False)
 
 def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
-                                    stats_min_time_sec= 0.1e-6):
+                                    stats_min_time_sec= 0.1e-6,
+                                    is_new_tf_stats= False):
     assert(re.match('fg', type0) and re.match('kap', type1))
     [KDs_dicts, KDs_dicts_new, outputs]= kstats.do_all_stats([output_file],
                                                              stats_min_time_sec,
@@ -59,42 +60,52 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
     input_site_KD= create_configs.compute_KD_from_k_r_and_quadratic_model(kap_k,
                                                                           kap_range,
                                                                           params.QuadraticLogKDParams)
-    entry= { 'box_side_A': box_side,
-             'n_kaps': n_kaps,
-             'n_fgs': n_fgs,
-             'fg_seq': fg_seq,
-             'kap_valency': assign.floaters[0].interactions.value,
-             'KD_sites_M_from_konoff': KDs_dict[0],
-             'KD_sites_M_from_konoff_lbound': KDs_dict[1],
-             'KD_sites_M_from_konoff_ubound': KDs_dict[2],
-             'fbound_sites_fg': KDs_dict_new['fbound_sitesA'],
-             'fbound_sites_fg_lbound': KDs_dict_new['fbound_sitesA_lbound'],
-             'fbound_sites_fg_ubound': KDs_dict_new['fbound_sitesA_ubound'],
-             'fbound_sites_kap': KDs_dict_new['fbound_sitesB'],
-             'fbound_sites_kap_lbound': KDs_dict_new['fbound_sitesB_lbound'],
-             'fbound_sites_kap_ubound': KDs_dict_new['fbound_sitesB_ubound'],
-             'KD_sites_M_from_fbound': KDs_dict_new['KD_sites'],
-             'KD_sites_M_from_fbound_lbound': KDs_dict_new['KD_sites_lbound'],
-             'KD_sites_M_from_fbound_ubound': KDs_dict_new['KD_sites_ubound'],
-             'input_site_KD': input_site_KD,
-             'k_on_per_ns_per_missing_ss_contact': KDs_dict_new['k_on_per_ns_per_missing_ss_contact'],
+    kap_valency= assign.floaters[0].interactions.value
+
+    # Get back to new for all if using corrected runs, in old runs,
+    # wrong stats whenever more than 1 interaction sites on second
+    # interactor (which is kap in our case):
+    if is_new_tf_stats:
+        SITES_B_VERSION= 'NEW'
+    else:
+        SITES_B_VERSION= ('OLD' if kap_valency>=2 else 'NEW')
+
+    entry= { 'box_side_A':                     box_side,
+             'n_kaps':                         n_kaps,
+             'n_fgs':                          n_fgs,
+             'fg_seq':                         fg_seq,
+             'kap_valency':                    kap_valency,
+             'KD_sites_M_from_konoff':         KDs_dict[0],
+             'KD_sites_M_from_konoff_lbound':  KDs_dict[1],
+             'KD_sites_M_from_konoff_ubound':  KDs_dict[2],
+             'fbound_sites_fg':                KDs_dict_new['fbound_sitesA_NEW'],
+             'fbound_sites_fg_lbound':         KDs_dict_new['fbound_sitesA_lbound_NEW'],
+             'fbound_sites_fg_ubound':         KDs_dict_new['fbound_sitesA_ubound_NEW'],
+             'fbound_sites_kap':               KDs_dict_new['fbound_sitesB_{}'.format(SITES_B_VERSION)],
+             'fbound_sites_kap_lbound':        KDs_dict_new['fbound_sitesB_lbound_{}'.format(SITES_B_VERSION)],
+             'fbound_sites_kap_ubound':        KDs_dict_new['fbound_sitesB_ubound_{}'.format(SITES_B_VERSION)],
+             'KD_sites_M_from_fbound':         KDs_dict_new['KD_sites_{}'.format(SITES_B_VERSION)],
+             'KD_sites_M_from_fbound_lbound':  KDs_dict_new['KD_sites_lbound_{}'.format(SITES_B_VERSION)],
+             'KD_sites_M_from_fbound_ubound':  KDs_dict_new['KD_sites_ubound_{}'.format(SITES_B_VERSION)],
+             'input_site_KD':                  input_site_KD,
+             'k_on_per_ns_per_missing_ss_contact':        KDs_dict_new['k_on_per_ns_per_missing_ss_contact'],
              'k_on_per_ns_per_missing_ss_contact_lbound': KDs_dict_new['k_on_per_ns_per_missing_ss_contact_lbound'],
              'k_on_per_ns_per_missing_ss_contact_ubound': KDs_dict_new['k_on_per_ns_per_missing_ss_contact_ubound'],
-             'k_off_per_ns': KDs_dict_new['k_off_per_ns_per_ss_contact'],
-             'k_off_per_ns_lbound': KDs_dict_new['k_off_per_ns_per_ss_contact_lbound'],
-             'k_off_per_ns_ubound': KDs_dict_new['k_off_per_ns_per_ss_contact_ubound'],
-             'fbound_chains_fg': KDs_dict_new['fbound_chainsA'],
-             'fbound_chains_fg_lbound': KDs_dict_new['fbound_chainsA_lbound'],
-             'fbound_chains_fg_ubound': KDs_dict_new['fbound_chainsA_ubound'],
-             'fbound_chains_kap': KDs_dict_new['fbound_chainsB'],
-             'fbound_chains_kap_lbound': KDs_dict_new['fbound_chainsB_lbound'],
-             'fbound_chains_kap_ubound': KDs_dict_new['fbound_chainsB_ubound'],
-             'KD_chains_M_from_fbound': KDs_dict_new['KD_chains'],
+             'k_off_per_ns':                   KDs_dict_new['k_off_per_ns_per_ss_contact'],
+             'k_off_per_ns_lbound':            KDs_dict_new['k_off_per_ns_per_ss_contact_lbound'],
+             'k_off_per_ns_ubound':            KDs_dict_new['k_off_per_ns_per_ss_contact_ubound'],
+             'fbound_chains_fg':               KDs_dict_new['fbound_chainsA'],
+             'fbound_chains_fg_lbound':        KDs_dict_new['fbound_chainsA_lbound'],
+             'fbound_chains_fg_ubound':        KDs_dict_new['fbound_chainsA_ubound'],
+             'fbound_chains_kap':              KDs_dict_new['fbound_chainsB'],
+             'fbound_chains_kap_lbound':       KDs_dict_new['fbound_chainsB_lbound'],
+             'fbound_chains_kap_ubound':       KDs_dict_new['fbound_chainsB_ubound'],
+             'KD_chains_M_from_fbound':        KDs_dict_new['KD_chains'],
              'KD_chains_M_from_fbound_lbound': KDs_dict_new['KD_chains_lbound'],
              'KD_chains_M_from_fbound_ubound': KDs_dict_new['KD_chains_ubound'],
-             'energy_kcal_per_mole': KDs_dicts_new['energy'][0],
-             'energy_kcal_per_mole_lbound': KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1],
-             'energy_kcal_per_mole_ubound': KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1]
+             'energy_kcal_per_mole':           KDs_dicts_new['energy'][0],
+             'energy_kcal_per_mole_lbound':    KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1],
+             'energy_kcal_per_mole_ubound':    KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1]
 
          }
     for key, value in KDs_dicts_new.iteritems():
@@ -141,6 +152,11 @@ if len(sys.argv)>2:
     stats_min_time_sec= float(sys.argv[2])
 else:
     stats_min_time_sec= 0.1e-6
+if len(sys.argv)>3:
+    ''' if true, always uses new version of kap/tf site statistics '''
+    is_new_tf_stats= bool(sys.argv[3])
+else:
+    is_new_tf_stats= False
 if os.path.exists(stats_csv_file):
     os.remove(stats_csv_file)
 data= []
@@ -151,7 +167,8 @@ for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
     for output_file in output_files:
         try:
             stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20',
-                                                         stats_min_time_sec)
+                                                         stats_min_time_sec,
+                                                         is_new_tf_stats)
             data.append(stats_entry)
         except (KeyboardInterrupt, SystemExit):
             raise
