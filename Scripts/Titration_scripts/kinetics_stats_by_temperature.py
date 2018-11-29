@@ -455,8 +455,6 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
     if(verbose):
         print "fraction bounds:"
     #do_stats(fbounds, "of floats", is_fraction=True)
-    fbound2_stats=do_stats(fbounds2, "of floats (from interaction order params)",
-                           is_fraction=True, verbose=verbose)
     fbounds_sites1_stats_old=do_stats(fbounds_sites1_old, "of FG-sites (from old interaction order params)",
                                       is_fraction=True, verbose=verbose)
     fbounds_sites2_stats_old=do_stats(fbounds_sites2_old, "of float-sites (from old interaction order params)",
@@ -469,7 +467,6 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         if not re.search("fg0 - kap20", key):
             continue
         # Assume A is FG sites and B is kap sites
-        EPS=1E-9
         B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
         fbA= max(min(fbounds_sites1_stats_old[key][0],1.0), EPSILON) # [AB]/[A0]
         fbB= max(min(fbounds_sites2_stats_old[key][0],1.0), EPSILON) # [AB]/[B0]
@@ -509,6 +506,19 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         if verbose:
             print "fg0-kap20 site-site-from-fbounds-old@%.2fK dH %.2e dS %.2e dS*T %.2e dG %.2e [kcal/mol]" % (T, dH, dS, dS*T, dH-dS*T)
 
+    fbound2_stats=do_stats(fbounds2, "of floats (from interaction order params)",
+                           is_fraction=True, verbose=verbose)
+    for key in fbound2_stats.iterkeys():
+        if not re.search("fg0 - kap20", key):
+            continue
+        fb2= max(min(fbound2_stats[key][0],1.0), EPSILON) # [AB]/[B0]
+        conf95_factor= get_sems_for_conf(0.95)
+        fb2_conf95= fbound2_stats[key][1] * conf95_factor
+        fb2_low=  max(min(fb2-fb2_conf95, 1-1.5*EPSILON), 0.5*EPSILON)
+        fb2_high= max(min(fb2+fb2_conf95, 1-0.5*EPSILON), 1.5*EPSILON)
+        ret_value_new[key]['fbound_chainsB_NEW']= fb2
+        ret_value_new[key]['fbound_chainsB_lbound_NEW']= fb2_low
+        ret_value_new[key]['fbound_chainsB_ubound_NEW']= fb2_high
     if IS_NEW_SITE_STATS:
         fbounds_sites1_stats_new=do_stats(fbounds_sites1_new, "of FG-sites (from new interaction order params)",
                                           is_fraction=True, verbose=verbose)
@@ -519,7 +529,6 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
             if not re.search("fg0 - kap20", key):
                 continue
             # A is FG sites and B is kap sites
-            EPS=1E-9
             B0 = N_KAPS * N_SITES_PER_KAP / AVOGADRO / box_volume_L # [B0] = total kap sites concentrtion
             fbA= max(min(fbounds_sites1_stats_new[key][0],1.0), EPSILON) # [AB]/[A0]
             fbB= max(min(fbounds_sites2_stats_new[key][0],1.0), EPSILON) # [AB]/[B0]
