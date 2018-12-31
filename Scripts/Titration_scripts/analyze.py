@@ -3,6 +3,7 @@ from __future__ import print_function
 import subprocess
 import numpy as np
 import os
+import os.path
 import re
 import sys
 
@@ -108,8 +109,8 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
              'KD_chains_M_from_fbound_ubound': KDs_dict_new['KD_chains_ubound'],
              'energy_kcal_per_mole':           KDs_dicts_new['energy'][0],
              'energy_kcal_per_mole_lbound':    KDs_dicts_new['energy'][0] - 1.96*KDs_dicts_new['energy'][1],
-             'energy_kcal_per_mole_ubound':    KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1]
-
+             'energy_kcal_per_mole_ubound':    KDs_dicts_new['energy'][0] + 1.96*KDs_dicts_new['energy'][1],
+             'output_file':                    output_file
          }
     for key, value in KDs_dicts_new.iteritems():
         if re.match("Rg", key):
@@ -119,7 +120,7 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
     return entry
 
 
-def put_data_in_csv_file(data, filename):
+def append_data_to_csv_file(data, filename):
     ''' append if file exists already '''
     if(len(data)==0):
         return
@@ -139,10 +140,42 @@ def put_data_in_csv_file(data, filename):
         open_mode='w'
         is_header= True
     with open(filename, open_mode) as f:
+        print("Appending to {} with header={} open_mode {}".format(filename, is_header, open_mode))
         df.to_csv(path_or_buf=f,
                   sep=' ',
-                  header= is_header)
+                  mode= open_mode,
+                  header= is_header,
+                  encoding= 'utf-8')
 #    print(df.head().to_string())
+
+def get_processed_files(stats_filename):
+    if os.path.exists(stats_filename):
+        with open(stats_filename, 'r') as f:
+            data= pd.read_csv(stats_filename, sep=' ')
+        return list(data['output_file'])
+    else:
+        return []
+
+def check_output_file(output_file, verbose):
+    '''
+    Check if file shoudl be processed (not processed beore, exists, a file,
+    and not empty).
+    '''
+    if output_file in processed_files:
+        if verbose:
+            print("Skipping " + output_file + " because it was processed")
+        return False
+    if not os.path.isfile(output_file):
+        if verbose:
+            print("Warning: skipping {} - not exists or not a regular file" \
+                  .format(output_file))
+        return False
+    if(os.stat(output_file).st_size == 0):
+        if verbose:
+            print("Warning: skipping {} - empty file" \
+                  .format(output_file))
+        return False
+    return True
 
 
 if __name__ != "__main__":
@@ -160,8 +193,9 @@ if len(sys.argv)>3:
     is_new_tf_stats= bool(sys.argv[3])
 else:
     is_new_tf_stats= False
-if os.path.exists(stats_csv_file):
-    os.remove(stats_csv_file)
+processed_files= get_processed_files(stats_csv_file)
+#if os.path.exists(stats_csv_file):
+#    os.remove(stats_csv_file)
 data= []
 MAX_DATA_ENTRIES= 500
 for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
@@ -169,19 +203,23 @@ for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
     print("Processing {:d} output files".format(len(output_files)))
     for output_file in output_files:
         try:
+            if not check_output_file(output_file, verbose= True):
+                continue
             stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20',
                                                          stats_min_time_sec,
                                                          is_new_tf_stats)
             data.append(stats_entry)
+            processed_files.append(output_file)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except:
-            print("Skipped {} due to exception - consider uncommenting 'raise' from analyze.py script".format(output_file))
+        except RuntimeError as e:
+            print("Skipped {} due to a Runtime Error exception - consider uncommenting 'raise' from analyze.py script".format(output_file))
+            print(e)
 #            raise
         print("Processed {}".format(output_file))
         if len(data)>MAX_DATA_ENTRIES:
-            put_data_in_csv_file(data, stats_csv_file)
+            append_data_to_csv_file(data, stats_csv_file)
             data=[]
-put_data_in_csv_file(data, stats_csv_file)
+append_data_to_csv_file(data, stats_csv_file)
 
 print("Finished succesfully")
