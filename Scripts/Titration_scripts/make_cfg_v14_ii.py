@@ -3,6 +3,8 @@
 #v11 - custom insteraction site geometry specified in cfg file
 #v12 - specify precise kap and FG concentrations + back to 4 interaction sites, n_kaps set to 16
 #v13 - same as v12 but fixed number of n_fgs instead of n_kaps
+#v14 - version used for scanning k-range space to fit KDs for subsequent production runs of titrations (see v15)
+#v14_ii - a variation of v14 that focuses on a different region of k-range space for non-sliding
 
 #########################################
 # Example: imppy make_cfg.py config.pb > config.txt
