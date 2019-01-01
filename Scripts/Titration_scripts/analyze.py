@@ -31,9 +31,13 @@ def get_KDs_from_dict(KDs_dict, type0, type1):
             return KDs
     assert(False)
 
-def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
+def get_stats_entry_for_output_file(output_file,
+                                    fg_seq,
+                                    params,
+                                    type0='fg0', type1='kap20',
                                     stats_min_time_sec= 0.1e-6,
-                                    is_new_tf_stats= False):
+                                    is_new_tf_stats= False
+                                    ):
     assert(re.match('fg', type0) and re.match('kap', type1))
     [KDs_dicts, KDs_dicts_new, outputs]= kstats.do_all_stats([output_file],
                                                              stats_min_time_sec,
@@ -57,7 +61,6 @@ def get_stats_entry_for_output_file(output_file, type0='fg0', type1='kap20',
             kap_range= assign.interactions[0].interaction_range.value
             kap_k= assign.interactions[0].interaction_k.value
     assert(kap_range is not None and kap_k is not None)
-    params=grid_params.GridParams()
     input_site_KD= create_configs.compute_KD_from_k_r_and_quadratic_model(kap_k,
                                                                           kap_range,
                                                                           params.QuadraticLogKDParams)
@@ -133,14 +136,21 @@ def append_data_to_csv_file(data, filename):
         * AVOGADRO * df['box_side_A']**3 * L_per_A3
     df['k_on_per_ns_per_M_ubound']= df['k_on_per_ns_per_missing_ss_contact_ubound'] \
         * AVOGADRO * df['box_side_A']**3 * L_per_A3
-    if os.path.exists(filename):
-        open_mode='a'
-        is_header= False
-    else:
+    if not os.path.exists(filename):
         open_mode='w'
         is_header= True
+    else:
+        file_columns= pd.read_csv(filename, nrows=1, sep=' ').columns[1:] # skip index column
+        if len(df.columns) != len(file_columns) or not (df.columns == file_columns).all():
+            print("New columns", df.columns)
+            print("Old columns", file_columns)
+            raise ValueError("Columns and column order of appended dataframe" + \
+                             " and existing csv file do not match!! Consider" + \
+                             " deleting old CSV file")
+        open_mode='a'
+        is_header= False
     with open(filename, open_mode) as f:
-        print("Appending to {} with header={} open_mode {}".format(filename, is_header, open_mode))
+#        print("Appending to {} with header={} open_mode {}".format(filename, is_header, open_mode))
         df.to_csv(path_or_buf=f,
                   sep=' ',
                   mode= open_mode,
@@ -152,11 +162,11 @@ def get_processed_files(stats_filename):
     if os.path.exists(stats_filename):
         with open(stats_filename, 'r') as f:
             data= pd.read_csv(stats_filename, sep=' ')
-        return list(data['output_file'])
+        return set(data['output_file'])
     else:
-        return []
+        return set()
 
-def check_output_file(output_file, verbose):
+def check_output_file(output_file, processed_files, verbose):
     '''
     Check if file shoudl be processed (not processed beore, exists, a file,
     and not empty).
@@ -166,8 +176,7 @@ def check_output_file(output_file, verbose):
             print("Skipping " + output_file + " because it was processed")
         return False
     if not os.path.isfile(output_file):
-        if verbose:
-            print("Warning: skipping {} - not exists or not a regular file" \
+        print("Warning: skipping {} - not exists or not a regular file, which is surprising" \
                   .format(output_file))
         return False
     if(os.stat(output_file).st_size == 0):
@@ -177,49 +186,62 @@ def check_output_file(output_file, verbose):
         return False
     return True
 
+def main(grid_params):
+    #    sys.exit(-1)
+    if len(sys.argv)>1:
+        stats_csv_file=sys.argv[1]
+    else:
+        stats_csv_file='stats.csv'
+    if len(sys.argv)>2:
+        stats_min_time_sec= float(sys.argv[2])
+    else:
+        stats_min_time_sec= 0.1e-6
+    if len(sys.argv)>3:
+        ''' if true, always uses new version of kap/tf site statistics '''
+        is_new_tf_stats= bool(sys.argv[3])
+    else:
+        is_new_tf_stats= False
+    processed_files= get_processed_files(stats_csv_file)
+    n_cached= len(processed_files)
+    if n_cached>0:
+        print("{:d} files already in file {:}".format(n_cached,
+                                                      stats_csv_file))
+    #if os.path.exists(stats_csv_file):
+    #    os.remove(stats_csv_file)
+    data= []
+    MAX_DATA_ENTRIES= 500
+    for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
+        output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
+        print("Processing up to {:d} output files with fg_seq {}".format(len(output_files),
+                                                                         fg_seq))
+        for output_file in output_files:
+            try:
+                if not check_output_file(output_file,
+                                         processed_files,
+                                         verbose= False):
+                    continue
+                stats_entry= get_stats_entry_for_output_file(output_file,
+                                                             fg_seq= fg_seq,
+                                                             params= grid_params,
+                                                             type0= 'fg0',
+                                                             type1= 'kap20',
+                                                             stats_min_time_sec= stats_min_time_sec,
+                                                             is_new_tf_stats= is_new_tf_stats)
+                data.append(stats_entry)
+                processed_files.add(output_file)
+                print("Processed {}".format(output_file))
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except RuntimeError as e:
+                print("Skipped {} due to a Runtime Error exception - consider uncommenting 'raise' from analyze.py script".format(output_file))
+                print(e)
+                #            raise
+            if len(data)>MAX_DATA_ENTRIES:
+                append_data_to_csv_file(data, stats_csv_file)
+                data=[]
+    append_data_to_csv_file(data, stats_csv_file)
 
-if __name__ != "__main__":
-    sys.exit(-1)
-if len(sys.argv)>1:
-    stats_csv_file=sys.argv[1]
-else:
-    stats_csv_file='stats.csv'
-if len(sys.argv)>2:
-    stats_min_time_sec= float(sys.argv[2])
-else:
-    stats_min_time_sec= 0.1e-6
-if len(sys.argv)>3:
-    ''' if true, always uses new version of kap/tf site statistics '''
-    is_new_tf_stats= bool(sys.argv[3])
-else:
-    is_new_tf_stats= False
-processed_files= get_processed_files(stats_csv_file)
-#if os.path.exists(stats_csv_file):
-#    os.remove(stats_csv_file)
-data= []
-MAX_DATA_ENTRIES= 500
-for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
-    output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
-    print("Processing {:d} output files".format(len(output_files)))
-    for output_file in output_files:
-        try:
-            if not check_output_file(output_file, verbose= True):
-                continue
-            stats_entry= get_stats_entry_for_output_file(output_file, 'fg0', 'kap20',
-                                                         stats_min_time_sec,
-                                                         is_new_tf_stats)
-            data.append(stats_entry)
-            processed_files.append(output_file)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except RuntimeError as e:
-            print("Skipped {} due to a Runtime Error exception - consider uncommenting 'raise' from analyze.py script".format(output_file))
-            print(e)
-#            raise
-        print("Processed {}".format(output_file))
-        if len(data)>MAX_DATA_ENTRIES:
-            append_data_to_csv_file(data, stats_csv_file)
-            data=[]
-append_data_to_csv_file(data, stats_csv_file)
-
-print("Finished succesfully")
+    print("Finished succesfully {:d} files including {:d} not previously cached".format(len(processed_files),
+                                                                                        len(processed_files)-n_cached))
+if __name__ == "__main__":
+    main(grid_params.GridParams())
