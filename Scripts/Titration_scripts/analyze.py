@@ -168,7 +168,7 @@ def get_processed_files(stats_filename):
 
 def check_output_file(output_file, processed_files, verbose):
     '''
-    Check if file shoudl be processed (not processed beore, exists, a file,
+    Check if file should be processed (not processed beore, exists, a file,
     and not empty).
     '''
     if output_file in processed_files:
@@ -210,8 +210,15 @@ def main(grid_params):
     #    os.remove(stats_csv_file)
     data= []
     MAX_DATA_ENTRIES= 500
-    for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF']:
-        output_files=glob.glob('Output/{}/*.pb'.format(fg_seq))
+    for fg_seq in ['F', 'FSSSSS', 'FFSSSS', 'FFFSSS', 'FFFFSS', 'FFFFFF',
+                   'FSFSSS', 'FSSFSS', 'FSSSFS', 'FSSSSF']:
+        folder_prefix='Output/' + fg_seq
+        if not os.path.exists(folder_prefix):
+            print("Warning: Folder Output/{} does not exist - skipping".format(fg_seq))
+            continue
+        if not os.path.isdir(folder_prefix):
+            raise ValueError("Error: " + folder_prefix + " is a file but not a directory")
+        output_files=glob.glob('{}/*.pb'.format(folder_prefix))
         print("Processing up to {:d} output files with fg_seq {}".format(len(output_files),
                                                                          fg_seq))
         for output_file in output_files:
