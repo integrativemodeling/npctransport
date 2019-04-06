@@ -637,8 +637,8 @@ def do_all_stats(fnames, STATS_FROM_SEC, verbose=True, return_outputs=None):
         try:
             if not key in on_stats_ss or not key in off_stats_ss:
                 continue
-            [k_on, k_on_low, k_on_high]=  get_k_low_high(on_stats_ss[key]) # per ns per missing contact
-            [k_off, k_off_low, k_off_high]=  get_k_low_high(off_stats_ss[key]) # per ns per contact
+            [k_on, k_on_low, k_on_high]=  get_k_low_high(on_stats_ss[key]) # per ns per missing NTR--FG-motif contact
+            [k_off, k_off_low, k_off_high]=  get_k_low_high(off_stats_ss[key]) # per ns per existing NTR--FG-motif contact
             if k_on<=0.0 or k_off<0.0:
                 continue #(k_on can't be zero, negative means invalid)
             KD=k_off/k_on
