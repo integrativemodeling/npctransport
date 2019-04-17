@@ -1,4 +1,5 @@
 #!/bin/python
+import argparse
 from IMP.npctransport import *
 #import seaborn as sbn
 import numpy as np
@@ -9,6 +10,23 @@ import cPickle as pickle
 import RMF
 import gzip
 import multiprocessing
+try:
+    import schwimmbad
+    SCHWIMMBAD_OK=True
+except ImportError:
+    SCHWIMMBAD_OK=False
+MPI_OK=False
+if SCHWIMMBAD_OK:
+    try:
+        import schwimmbad.mpi
+        schwimmbad.mpi.MPIPool()
+        MPI_OK=True
+        print("MPI is on")
+    except ImportError:
+        print("MPI is off (no MPI module available)")
+    except ValueError as e:
+        print("MPI is off (not activated as mpi)")
+
 
 #IS_SKIP_FGS= False
 IS_SKIP_FGS= False
@@ -48,13 +66,13 @@ def dataset_to_xyz(dataset):
     return XYZ
 
 
-def handle_file(fname, processed_fnames):
+def handle_file(fname):#, processed_fnames=None):
     ''' Reads an npctransport HDF5 output file and load all the 3D
         matrices of it in a dictionary from type to a 3-D np.array
         object
 
         fname - file to be handles
-        processed_fnames - a shared managed list of all filenames that have been processed
+        processed_fnames - a shared managed list of all filenames that have been processed (or None if no cache)
     '''
     global IS_SKIP_FGS
     print("Handling {0}".format(fname))
@@ -79,19 +97,22 @@ def handle_file(fname, processed_fnames):
         dataset= G_floaters.get_child_int_data_set_3d(floater_type)
         xyzs[floater_type]= dataset_to_xyz(dataset)
     print("Done handling {0}".format(fname))
-    processed_fnames.append(fname)
-    return xyzs
+#    if processed_fnames is not None:
+#        processed_fnames.append(fname)
+    return (xyzs, fname)
 
-def _sum_xyzs_exception(xyzs):
+def _sum_xyzs_exception(xyzs_and_fname):
     print("Processing datasets returned by handle_file()")
     global N
     global S
     global DISABLE_RANDOM
     global processed_fnames
     global CACHE_FNAME
-    if xyzs is None:
+    global MPI_ON
+    if xyzs_and_fname is None:
         print("Empty xyzs skipped")
         return
+    xyzs, fname= xyzs_and_fname
     cache_frequency=500
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
@@ -106,6 +127,7 @@ def _sum_xyzs_exception(xyzs):
                         continue
                 else:
                     S[i][type_name]= xyz
+    processed_fnames.append(fname)
     print("Number of files processed {0:d}".format(len(processed_fnames)))
     if(len(processed_fnames) % cache_frequency == 0):
         do_stats(N,S)
@@ -116,18 +138,66 @@ def _sum_xyzs_exception(xyzs):
 
 def sum_xyzs(xyzs):
     try:
-        _sum_xyzs_exception(xyzs)
+        _sum_xyzs_exception(xyzs_and_file)
     except:
-        print("Unknown exception in sum_xyzs()")
-        raise
+        if xyzs_and_file is not None:
+            print("Exception summarizing stats of {0}".format(xyzs_and_file[1]))
+        else:
+            print("Unknown exception in sum_xyzs(None)")
+#        raise
+
+def get_cmdline_args():
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument('fnames', metavar='file-names', type=str, nargs='+',
+                        help='hdf5 file names from NPC simulations')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--ncores", dest="n_cores", default=1,
+                       type=int, help="Number of processes (uses multiprocessing).")
+    group.add_argument("--mpi", dest="mpi", default=False,
+                       action="store_true", help="Run with MPI.")
+    args = parser.parse_args()
+    return args
+
+
+def run_schwimmbad_pool(filenames, is_mpi, n_processes):
+    print("Running with Scwimmnbad")
+    pool= schwimmbad.choose_pool(mpi =is_mpi,
+                                 processes= n_processes)
+    #    pool= schwimmbad.mpi.MPIPool()
+    #    if is_mpi and not pool.is_master():
+    #       pool.wait(lambda: sys.exit(0))
+    results= pool.map(handle_file,
+                      filenames,
+                      callback=sum_xyzs)
+    pool.close()
+    return results
+
+def run_multiprocessing_pool(filenames, n_processes):
+    print("Running with Multiprocessing")
+    pool= schwimmbad.choose_pool(mpi =is_mpi,
+                                 processes= n_processes)
+    #    pool= schwimmbad.mpi.MPIPool()
+    #    if is_mpi and not pool.is_master():
+    #       pool.wait(lambda: sys.exit(0))
+    results= pool.map(handle_file,
+                      filenames,
+                      callback=sum_xyzs)
+    pool.close()
+    return results
 
 
 ############# Main ############
 if __name__ == '__main__':
     #import cPickle as p; D=p.load(open('TMP.get_float_stats_cache.p','rb')); print len(D[2]);
     CACHE_FNAME='TMP.get_float_stats_cache.p'
-#    CACHE_FNAME= None
-    fnames=set(sys.argv[1:])
+    if SCHWIMMBAD_OK:
+        args= get_cmdline_args()
+        if(args.mpi):
+            assert(MPI_OK)
+            #    CACHE_FNAME= None
+        fnames=set(args.fnames)
+    else:
+        fnames=set(sys.argv[1:])
     try:
         #    with gzip.open(CACHE_FNAME+".gzip",'rb') as f:
         if CACHE_FNAME is None:
@@ -143,24 +213,29 @@ if __name__ == '__main__':
         processed_fnames=set()
     stats_time_ns=0.0
     fnames=fnames.difference(processed_fnames)
-    pool= multiprocessing.Pool(processes=8)
-    manager= multiprocessing.Manager()
-    processed_fnames= manager.list(processed_fnames)
-    print("Starting pool")
-    for fname in fnames:
-        try:
-            print(fname)
-            pool.apply_async(handle_file,
-                             args=(fname, processed_fnames),
-                             callback=sum_xyzs)
-        except:
-            print("Failed on {0}.format(fname)")
-    # for r in R:
-    #     r.wait()
-    #     r.get()
-#    pool.wait()
-    pool.close()
-    pool.join()
+    if SCHWIMMBAD_OK:
+        results= run_schwimmbad_pool(fnames,
+                                     is_mpi= args.mpi,
+                                     n_processes= args.n_cores)
+    else:
+        pool= multiprocessing.Pool(processes=8)
+        manager= multiprocessing.Manager()
+        processed_fnames_managed= manager.list(processed_fnames)
+        print("Starting pool")
+        for fname in fnames:
+            try:
+                print(fname)
+                pool.apply_async(handle_file,
+                                 args=(fname), #, processed_fnames_managed),
+                                 callback=sum_xyzs)
+            except:
+                print("Failed on {0}.format(fname)")
+        # for r in R:
+        #     r.wait()
+        #     r.get()
+        #    pool.wait()
+        pool.close()
+        pool.join()
     do_stats(N,S)
     if CACHE_FNAME is not None:
         print "UPDATING CACHE"
