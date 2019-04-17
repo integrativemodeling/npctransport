@@ -10,6 +10,7 @@ import cPickle as pickle
 import multiprocessing
 import os.path
 from schwimmbad.mpi import MPIPool, MPI
+import pandas as pd
 
 print(sys.argv)
 OUTPUT_PREFIX= sys.argv[1]
@@ -19,7 +20,7 @@ IS_REPORT_CACHE= len(sys.argv)>3 and sys.argv[3]=='report_cache_only'
 CACHE_FNAME= 'TMP.transport_stats_cache.{}.{}.p' .format\
     (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
      STATS_FROM_SEC_STR)
-OUTPUT_FILENAME= 'STATS_{}_from_{}_seconds.txt'.format\
+OUTPUT_FILENAME= 'STATS_{}_from_{}_seconds.csv'.format\
                  (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
                   STATS_FROM_SEC_STR)
 # confidence interval required
@@ -90,22 +91,29 @@ def print_stats(N,
                 table,
                 total_sim_time_sec,
                 output_filename):
-    with open(output_filename,'w') as F:
-        # print transports per particle per second
-        print("Total simulation time: {:.6f} [sec/particle]".format( total_sim_time_sec),
-              file= F)
-        keys= sorted(table.keys())
-        for key in keys:
-            #    mean_per_sec=table[key]/n/sim_time_sec;
-            mean= table[key]/total_sim_time_sec
-            sem= math.sqrt(mean/total_sim_time_sec/N[key])
-            print(key +
-                  '{:8.1f} +- {:8.2f} /sec/particle (confidence {:.0f}%%);   time for all particles={:.3f} [sec]'.format\
+    '''
+    print transports per particle per second to stdout and to file output_filename in csv format
+    '''
+    print("Total simulation time: {:.6f} [sec/particle]".format( total_sim_time_sec))
+    rows= []
+    keys= sorted(table.keys())
+    for key in keys:
+        #    mean_per_sec=table[key]/n/sim_time_sec;
+        mean= table[key]/total_sim_time_sec
+        sem= math.sqrt(mean/total_sim_time_sec/N[key])
+        print(key +
+              '{:8.1f} +- {:8.2f} /sec/particle (confidence {:.0f}%%);   time for all particles={:.3f} [sec]'.format\
                   (mean,
                    get_sems_for_conf(CONF)*sem,
                    CONF*100,
-                   total_sim_time_sec*N[key]),
-                   file= F)
+                   total_sim_time_sec*N[key]))
+        rows.append({'type':key,
+                     'time_sec_mean':mean,
+                     'time_sec_sem':sem,
+                     'total_sim_time_sec':total_sim_time_sec*N[key]
+                     })
+    df=pd.DataFrame(rows)
+    df.to_csv(output_filename)
 
 
 def open_file(fname):
@@ -200,8 +208,10 @@ def sum_output_stats(file_summary):
 
 
 ############# Main ###########
+print("Checkpoint 1")
 fnames= set(glob.glob(OUTPUT_PREFIX+"*.pb"))
 unpickle_or_initialize_globals(CACHE_FNAME)
+print("Checkpoint 2")
 if IS_REPORT_CACHE:
     print_stats(N, table, total_sim_time_sec,
                 OUTPUT_FILENAME)
@@ -209,7 +219,9 @@ if IS_REPORT_CACHE:
 fnames= fnames.difference(processed_fnames)
 print("Processing {:d} files that are not present in cache".format(len(fnames)))
 pool= MPIPool()
+print("Checkpoint 3")
 pool.wait(lambda: sys.exit(0))
+print("Checkpoint 4")
 #pool= multiprocessing.Pool(processes=8)
 #manager= multiprocessing.Manager()
 #processed_fnames= manager.list(processed_fnames)
@@ -223,3 +235,4 @@ print("Pool closed")
 pickle_globals(CACHE_FNAME)
 print_stats(N, table, total_sim_time_sec,
             OUTPUT_FILENAME)
+print("Checkpoint 5")
