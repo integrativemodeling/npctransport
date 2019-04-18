@@ -1,15 +1,16 @@
 #!/bin/python
-import argparse
 from IMP.npctransport import *
-#import seaborn as sbn
-import numpy as np
-#import pandas as pd
-import sys
-import random
-import cPickle as pickle
 import RMF
+import argparse
+import cPickle as pickle
+import glob
 import gzip
 import multiprocessing
+import numpy as np
+import os
+import os.path
+import random
+import sys
 try:
     import schwimmbad
     SCHWIMMBAD_OK=True
@@ -113,7 +114,7 @@ def _sum_xyzs_exception(xyzs_and_fname):
         print("Empty xyzs skipped")
         return
     xyzs, fname= xyzs_and_fname
-    cache_frequency=500
+    cache_frequency=300
     print("Checpoint 1 in {}".format(xyzs_and_fname[1]))
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
@@ -151,8 +152,8 @@ def sum_xyzs(xyzs_and_file):
 
 def get_cmdline_args():
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument('fnames', metavar='file-names', type=str, nargs='+',
-                        help='hdf5 file names from NPC simulations')
+    parser.add_argument('input_prefixes', metavar='input file prefixes', type=str, nargs='+',
+                        help='List of prefixes of input hdf5 file from NPC simulations')
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--ncores", dest="n_cores", default=1,
                        type=int, help="Number of processes (uses multiprocessing).")
@@ -194,19 +195,29 @@ def run_multiprocessing_pool(filenames, n_processes):
     pool.close()
     pool.join()
 
+def get_input_fnames_set_from_prefixes(input_prefixes):
+    ''' return value is set '''
+    input_fnames= []
+    for input_prefix in input_prefixes:
+        input_fnames.extend(glob.glob(input_prefix + "*.hdf5"))
+    return set(input_fnames)
+
 
 ############# Main ############
 if __name__ == '__main__':
     #import cPickle as p; D=p.load(open('TMP.get_float_stats_cache.p','rb')); print len(D[2]);
-    CACHE_FNAME='TMP.get_float_stats_cache.p'
     if SCHWIMMBAD_OK:
         args= get_cmdline_args()
         if(args.mpi):
             assert(MPI_OK)
             #    CACHE_FNAME= None
-        fnames=set(args.fnames)
+        input_prefixes= args.input_prefixes
     else:
-        fnames=set(sys.argv[1:])
+        input_prefixes= sys.argv[1:]
+    CACHE_FNAME='Output/CACHE.get_float_stats_{}.p'.format('__'.join(input_prefixes).replace('/','_'))
+    fnames= get_input_fnames_set_from_prefixes(input_prefixes)
+    print("Processing {} files with prefixes: {}".format(len(fnames),
+                                                         ", ".join(input_prefixes)))
     try:
         #    with gzip.open(CACHE_FNAME+".gzip",'rb') as f:
         if CACHE_FNAME is None:
