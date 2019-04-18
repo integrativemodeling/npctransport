@@ -36,12 +36,15 @@ DISABLE_RANDOM=True or (N==1)
 # TODO: add stats time to pickle and to do_stats(), though will invalidate old caches
 
 def do_stats(N,S):
-#    print "TOTAL STATS TIME [sec]: ", stats_time_ns*1E-9
-    print "Writing stat files"
+    #    print "TOTAL STATS TIME [sec]: ", stats_time_ns*1E-9
+    if not os.path.isdir("Output"):
+        assert(not os.path.exists("Output"))
+        os.mkdir("Output")
+    print "Writing stat files to Output/"
     for i in range(N):
         for f_type,XYZ in S[i].iteritems():
-            print "hello",f_type
-            fname="S%d.%s.txt" % (i, f_type)
+            print ("hello {}".format(f_type))
+            fname="Output/S%d.%s.txt" % (i, f_type)
             F=open(fname,'w')
             for YZ in XYZ:
                 for Z in YZ:
@@ -66,13 +69,12 @@ def dataset_to_xyz(dataset):
     return XYZ
 
 
-def handle_file(fname):#, processed_fnames=None):
+def handle_file(fname):
     ''' Reads an npctransport HDF5 output file and load all the 3D
         matrices of it in a dictionary from type to a 3-D np.array
         object
 
         fname - file to be handles
-        processed_fnames - a shared managed list of all filenames that have been processed (or None if no cache)
     '''
     global IS_SKIP_FGS
     print("Handling {0}".format(fname))
@@ -97,8 +99,6 @@ def handle_file(fname):#, processed_fnames=None):
         dataset= G_floaters.get_child_int_data_set_3d(floater_type)
         xyzs[floater_type]= dataset_to_xyz(dataset)
     print("Done handling {0}".format(fname))
-#    if processed_fnames is not None:
-#        processed_fnames.append(fname)
     return (xyzs, fname)
 
 def _sum_xyzs_exception(xyzs_and_fname):
@@ -106,7 +106,7 @@ def _sum_xyzs_exception(xyzs_and_fname):
     global N
     global S
     global DISABLE_RANDOM
-    global processed_fnames
+    global processed_fnames # a set
     global CACHE_FNAME
     global MPI_ON
     if xyzs_and_fname is None:
@@ -114,6 +114,7 @@ def _sum_xyzs_exception(xyzs_and_fname):
         return
     xyzs, fname= xyzs_and_fname
     cache_frequency=500
+    print("Checpoint 1 in {}".format(xyzs_and_fname[1]))
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
             if(random.random()<0.9 or DISABLE_RANDOM):
@@ -127,7 +128,8 @@ def _sum_xyzs_exception(xyzs_and_fname):
                         continue
                 else:
                     S[i][type_name]= xyz
-    processed_fnames.append(fname)
+    print("Checpoint 2 in {}".format(xyzs_and_fname[1]))
+    processed_fnames.add(fname)
     print("Number of files processed {0:d}".format(len(processed_fnames)))
     if(len(processed_fnames) % cache_frequency == 0):
         do_stats(N,S)
@@ -135,8 +137,10 @@ def _sum_xyzs_exception(xyzs_and_fname):
             print "UPDATING CACHE"
             with open(CACHE_FNAME,'wb') as f:
                 pickle.dump([ N, S, list(processed_fnames)], f)
+    print("{} summarized succesfully".format(xyzs_and_fname[1]))
 
-def sum_xyzs(xyzs):
+def sum_xyzs(xyzs_and_file):
+    # Do not add any exceptions to this function - to prevent hung processes
     try:
         _sum_xyzs_exception(xyzs_and_file)
     except:
@@ -144,7 +148,6 @@ def sum_xyzs(xyzs):
             print("Exception summarizing stats of {0}".format(xyzs_and_file[1]))
         else:
             print("Unknown exception in sum_xyzs(None)")
-#        raise
 
 def get_cmdline_args():
     parser = argparse.ArgumentParser(description="")
@@ -153,14 +156,14 @@ def get_cmdline_args():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--ncores", dest="n_cores", default=1,
                        type=int, help="Number of processes (uses multiprocessing).")
-    group.add_argument("--mpi", dest="mpi", default=False,
-                       action="store_true", help="Run with MPI.")
+    group.add_argument("--mpi", dest="mpi", default=MPI_OK,
+                       action="store_true", help="Run with MPI (default is false, unless using mpirun/exec with schimmbad module installed, which forces it to be true")
     args = parser.parse_args()
     return args
 
 
 def run_schwimmbad_pool(filenames, is_mpi, n_processes):
-    print("Running with Scwimmnbad")
+    print("Running with Scwimmbad pool")
     pool= schwimmbad.choose_pool(mpi =is_mpi,
                                  processes= n_processes)
     #    pool= schwimmbad.mpi.MPIPool()
@@ -173,17 +176,23 @@ def run_schwimmbad_pool(filenames, is_mpi, n_processes):
     return results
 
 def run_multiprocessing_pool(filenames, n_processes):
-    print("Running with Multiprocessing")
-    pool= schwimmbad.choose_pool(mpi =is_mpi,
-                                 processes= n_processes)
-    #    pool= schwimmbad.mpi.MPIPool()
-    #    if is_mpi and not pool.is_master():
-    #       pool.wait(lambda: sys.exit(0))
-    results= pool.map(handle_file,
-                      filenames,
-                      callback=sum_xyzs)
+    print("Running with Multiprocessing pool")
+    pool= multiprocessing.Pool(processes= n_processes)
+    manager= multiprocessing.Manager()
+    for fname in fnames:
+        try:
+            print(fname)
+            pool.apply_async(handle_file,
+                             args=(fname), #, processed_fnames_managed),
+                             callback=sum_xyzs)
+        except:
+            print("Failed on {0}.format(fname)")
+    # for r in R:
+    #     r.wait()
+    #     r.get()
+    #    pool.wait()
     pool.close()
-    return results
+    pool.join()
 
 
 ############# Main ############
@@ -206,7 +215,8 @@ if __name__ == '__main__':
             [ n, S, processed_fnames ] = pickle.load(f)
             assert(fnames.issuperset(processed_fnames))
             assert(n==N)
-            print("Using cache", CACHE_FNAME)
+            print("Using cache file {} with {} pre-processed files".format(CACHE_FNAME,
+                                                                           len(processed_fnames)))
     except:
         print "NOT USING CACHE"
         S=[{} for i in range(N)]
@@ -218,24 +228,8 @@ if __name__ == '__main__':
                                      is_mpi= args.mpi,
                                      n_processes= args.n_cores)
     else:
-        pool= multiprocessing.Pool(processes=8)
-        manager= multiprocessing.Manager()
-        processed_fnames_managed= manager.list(processed_fnames)
-        print("Starting pool")
-        for fname in fnames:
-            try:
-                print(fname)
-                pool.apply_async(handle_file,
-                                 args=(fname), #, processed_fnames_managed),
-                                 callback=sum_xyzs)
-            except:
-                print("Failed on {0}.format(fname)")
-        # for r in R:
-        #     r.wait()
-        #     r.get()
-        #    pool.wait()
-        pool.close()
-        pool.join()
+        results= run_multiprocessing_pool(fnames,
+                                          n_processes= 8)
     do_stats(N,S)
     if CACHE_FNAME is not None:
         print "UPDATING CACHE"

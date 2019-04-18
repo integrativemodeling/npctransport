@@ -208,10 +208,8 @@ def sum_output_stats(file_summary):
 
 
 ############# Main ###########
-print("Checkpoint 1")
 fnames= set(glob.glob(OUTPUT_PREFIX+"*.pb"))
 unpickle_or_initialize_globals(CACHE_FNAME)
-print("Checkpoint 2")
 if IS_REPORT_CACHE:
     print_stats(N, table, total_sim_time_sec,
                 OUTPUT_FILENAME)
@@ -219,9 +217,7 @@ if IS_REPORT_CACHE:
 fnames= fnames.difference(processed_fnames)
 print("Processing {:d} files that are not present in cache".format(len(fnames)))
 pool= MPIPool()
-print("Checkpoint 3")
 pool.wait(lambda: sys.exit(0))
-print("Checkpoint 4")
 #pool= multiprocessing.Pool(processes=8)
 #manager= multiprocessing.Manager()
 #processed_fnames= manager.list(processed_fnames)
@@ -235,4 +231,3 @@ print("Pool closed")
 pickle_globals(CACHE_FNAME)
 print_stats(N, table, total_sim_time_sec,
             OUTPUT_FILENAME)
-print("Checkpoint 5")
