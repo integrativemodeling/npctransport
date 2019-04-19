@@ -103,7 +103,7 @@ def handle_file(fname):
     return (xyzs, fname)
 
 def _sum_xyzs_exception(xyzs_and_fname):
-    print("Processing datasets returned by handle_file()")
+#    print("Processing datasets returned by handle_file()")
     global N
     global S
     global DISABLE_RANDOM
@@ -114,8 +114,8 @@ def _sum_xyzs_exception(xyzs_and_fname):
         print("Empty xyzs skipped")
         return
     xyzs, fname= xyzs_and_fname
-    cache_frequency=300
-    print("Checpoint 1 in {}".format(xyzs_and_fname[1]))
+    cache_frequency=150
+#    print("Checkpoint 1 in {}".format(fname))
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
             if(random.random()<0.9 or DISABLE_RANDOM):
@@ -129,16 +129,18 @@ def _sum_xyzs_exception(xyzs_and_fname):
                         continue
                 else:
                     S[i][type_name]= xyz
-    print("Checpoint 2 in {}".format(xyzs_and_fname[1]))
+#    print("Checkpoint 2 in {}".format(fname))
     processed_fnames.add(fname)
-    print("Number of files processed {0:d}".format(len(processed_fnames)))
+#    print("Checkpoint 3 in {}".format(fname))
+#    print("Number of files processed {0:d}".format(len(processed_fnames)))
     if(len(processed_fnames) % cache_frequency == 0):
         do_stats(N,S)
         if CACHE_FNAME is not None:
             print "UPDATING CACHE"
             with open(CACHE_FNAME,'wb') as f:
                 pickle.dump([ N, S, list(processed_fnames)], f)
-    print("{} summarized succesfully".format(xyzs_and_fname[1]))
+    xyzs.clear() # Clear memory since no more use for xyzs - otherwise pool.map is trying to return it
+    print("Done summarizing {} statistics".format(fname))
 
 def sum_xyzs(xyzs_and_file):
     # Do not add any exceptions to this function - to prevent hung processes
@@ -224,14 +226,18 @@ if __name__ == '__main__':
             assert(False)
         with open(CACHE_FNAME,'rb') as f:
             [ n, S, processed_fnames ] = pickle.load(f)
+            processed_fnames= set(processed_fnames)
             assert(fnames.issuperset(processed_fnames))
             assert(n==N)
             print("Using cache file {} with {} pre-processed files".format(CACHE_FNAME,
                                                                            len(processed_fnames)))
+    except AssertionError as e:
+        print(e)
+        raise
     except:
         print "NOT USING CACHE"
         S=[{} for i in range(N)]
-        processed_fnames=set()
+        processed_fnames= set()
     stats_time_ns=0.0
     fnames=fnames.difference(processed_fnames)
     if SCHWIMMBAD_OK:
