@@ -1,4 +1,7 @@
 #!/bin/python
+# Synposis: get statistics on spatial distribution of various molecules
+# in the output HDF5 file from an fg_simulation simulation
+
 from IMP.npctransport import *
 import RMF
 import argparse
