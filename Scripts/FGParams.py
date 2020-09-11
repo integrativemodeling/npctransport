@@ -38,5 +38,5 @@ class FGParams:
     return ret
 
   def update(self, dictionary):
-    for key, value in dictionary.iteritems():
+    for key, value in dictionary.items():
       setattr(self, key, value)

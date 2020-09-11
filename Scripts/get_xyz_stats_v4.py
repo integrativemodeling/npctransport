@@ -41,7 +41,7 @@ def do_stats(N,S):
     if not os.path.isdir("Output"):
         assert(not os.path.exists("Output"))
         os.mkdir("Output")
-    print "Writing stat files to Output/"
+    print("Writing stat files to Output/")
     for i in range(N):
         for f_type,XYZ in S[i].iteritems():
             print ("hello {}".format(f_type))
@@ -114,7 +114,7 @@ def _sum_xyzs_exception(xyzs_and_fname):
         print("Empty xyzs skipped")
         return
     xyzs, fname= xyzs_and_fname
-    cache_frequency=150
+    cache_frequency=250
 #    print("Checkpoint 1 in {}".format(fname))
     for i in range(N):
         for type_name,xyz in xyzs.iteritems():
@@ -181,7 +181,7 @@ def run_schwimmbad_pool(filenames, is_mpi, n_processes):
 def run_multiprocessing_pool(filenames, n_processes):
     print("Running with Multiprocessing pool")
     pool= multiprocessing.Pool(processes= n_processes)
-    manager= multiprocessing.Manager()
+#    manager= multiprocessing.Manager()
     for fname in fnames:
         try:
             print(fname)

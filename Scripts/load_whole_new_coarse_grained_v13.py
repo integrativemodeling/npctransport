@@ -437,7 +437,7 @@ def get_fg_regions_to_params_ordered(fg_regions_to_params):
     IS_ANCHOR= ('anchor' in fg_regions_to_params)
     ordered_list= [(key,value) for key,value in \
                    sorted(fg_regions_to_params.items(), \
-                          key=lambda k,v: (v.res_from,k)) ]
+                          key=(lambda item: (item[1].res_from, item[0]))) ] # sort based on value resfrom (primary) then fg type (secondary), I don't remember why this was originally done also based on fg type
     # Verify continuous seq:
     for i,(region_name,fg_params) in enumerate(ordered_list):
         if i>0:
