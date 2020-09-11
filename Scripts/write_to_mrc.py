@@ -6,7 +6,7 @@ import glob
 import re
 import numpy as np
 import scipy.ndimage.interpolation
-
+import multiprocessing
 M=110
 
 def load_nup_from_file(nup_filename):
@@ -53,6 +53,8 @@ def add_nup_to_dmaps(dmaps, nup_name, weight=1.0):
         if re.search(nup_name+"[0-9]", nup_filename):
             continue # wrong nup if prefix + digit
         print("Processing {}".format(nup_filename))
+        nup_dmap= DensityMap(dh)
+        nup_dmap.set_void_map(110,110,110)
         a=load_nup_from_file(nup_filename)
         for xi in range(M):
             for yi in range(M):
@@ -60,7 +62,11 @@ def add_nup_to_dmaps(dmaps, nup_name, weight=1.0):
                     for dmap in dmaps:
                         index=dmap.xyz_ind2voxel(xi,yi,zi)
                         cur_val=dmap.get_value(index)
+                        nup_dmap.set_value(index, weight*a[xi][yi][zi])
                         dmap.set_value(index, cur_val + weight*a[xi][yi][zi])
+        write_map(nup_dmap,
+                  nup_filename.replace("txt", "mrc"),
+                  MRCReaderWriter())
 
 bb= IMP.algebra.BoundingBox3D( IMP.algebra.Vector3D([-550,-550,-550]),
                                IMP.algebra.Vector3D([+550,+550,+550]) );
@@ -99,6 +105,12 @@ def write_diffuser(name_prefix,
     MRCReaderWriter())
     return dmap
 
+def write_fg(nup, dmap):
+    dmap_cur=DensityMap(dh)
+    dmap_cur.set_void_map(110,110,110)
+    add_nup_to_dmaps([dmap, dmap_cur], nup)
+    write_map(dmap_cur, "%s.mrc" % nup, MRCReaderWriter())
+
 def write_fgs(fg_nup_list):
     '''
     Convert FGs to MRC
@@ -108,10 +120,7 @@ def write_fgs(fg_nup_list):
     dmap=DensityMap(dh)
     dmap.set_void_map(110,110,110)
     for nup in fg_nup_list:
-        dmap_cur=DensityMap(dh)
-        dmap_cur.set_void_map(110,110,110)
-        add_nup_to_dmaps([dmap, dmap_cur], nup)
-        write_map(dmap_cur, "%s.mrc" % nup, MRCReaderWriter())
+        write_fg(nup, dmap)
     write_map(dmap, "FGs.mrc", MRCReaderWriter())
 
 def write_obstacles():
