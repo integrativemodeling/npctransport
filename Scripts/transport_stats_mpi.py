@@ -9,7 +9,11 @@ import scipy.stats as stats
 import cPickle as pickle
 import multiprocessing
 import os.path
-from schwimmbad.mpi import MPIPool, MPI
+try:
+    from schwimmbad.mpi import MPIPool, MPI
+    MPI=True
+except:
+    MPI=False
 import pandas as pd
 
 print(sys.argv)
@@ -62,6 +66,8 @@ def unpickle_or_initialize_globals(cache_fname):
             assert(fnames.issuperset(processed_fnames))
             assert(cached_stats_from_sec == STATS_FROM_SEC)
             print("Cache: processed {} files".format(len(processed_fnames)))
+#	except KeyboardInterrupt as e:
+#		raise
     except:
         print("NOT USING CACHE")
         N= {}
@@ -94,6 +100,7 @@ def print_stats(N,
     '''
     print transports per particle per second to stdout and to file output_filename in csv format
     '''
+    global STATS_FROM_SEC_STR
     print("Total simulation time: {:.6f} [sec/particle]".format( total_sim_time_sec))
     rows= []
     keys= sorted(table.keys())
@@ -102,7 +109,7 @@ def print_stats(N,
         mean= table[key]/total_sim_time_sec
         sem= math.sqrt(mean/total_sim_time_sec/N[key])
         print(key +
-              '{:8.1f} +- {:8.2f} /sec/particle (confidence {:.0f}%%);   time for all particles={:.3f} [sec]'.format\
+              '{:8.1f} +- {:8.2f} /sec/particle (confidence {:.0f}%);   time for all particles={:.3f} [sec]'.format\
                   (mean,
                    get_sems_for_conf(CONF)*sem,
                    CONF*100,
@@ -113,7 +120,8 @@ def print_stats(N,
                      'total_sim_time_sec':total_sim_time_sec*N[key]
                      })
     df=pd.DataFrame(rows)
-    df.to_csv(output_filename)
+    df.to_csv(output_filename,
+              index_label= "From " + STATS_FROM_SEC_STR)
 
 
 def open_file(fname):
@@ -137,6 +145,8 @@ def open_file(fname):
     except ValueError as e:
         print("EXCEPTION {} {}".format(fname, e))
         return {"fname":fname,"status":-1}
+#	except KeyboardInterrupt:
+#		raise
     except:
         print("EXCEPTION {}".format(fname))
         return {"fname":fname,"status":-1}
@@ -144,7 +154,7 @@ def open_file(fname):
         print("SKIP negative normalized sim-time {} stats from sec {}" \
               .fomrat(sim_time_sec, STATS_FROM_SEC))
         return {"fname":fname,"status":-1}
-    Ns_dict= {}
+    Ns_dict= {} # a dictionary that maps the number of molecules for each molecule in the simulation
     counts_dict= {}
     for floater_a in output.assignment.floaters:
         Ns_dict[floater_a.type]= floater_a.number.value
@@ -195,14 +205,20 @@ def _sum_output_stats_exception(file_summary):
         if CACHE_FNAME is not None:
             pickle_globals(CACHE_FNAME)
 
-def sum_output_stats(file_summary):
-    try:
-        _sum_output_stats_exception(file_summary)
-    except:
-        if file_summary is not None:
-            print("Exception summarizing stats of {0}".format(file_summary["fname"]))
-        else:
-            print("Unknown exception in sum_output_stats()")
+def sum_output_stats(file_summaries):
+	if isinstance(file_summaries, dict):
+		file_summaries= [file_summaries]
+	for file_summary in file_summaries:
+		try:
+			_sum_output_stats_exception(file_summary)
+		except KeyboardInterrupt:
+			print("Keyboard interruption caught")
+			raise
+		except:
+			if file_summary is not None:
+				print("Exception summarizing stats of {0}".format(file_summary["fname"]))
+			else:
+				print("Unknown exception in sum_output_stats()")
 #        raise
 
 
@@ -216,17 +232,25 @@ if IS_REPORT_CACHE:
     sys.exit()
 fnames= fnames.difference(processed_fnames)
 print("Processing {:d} files that are not present in cache".format(len(fnames)))
-pool= MPIPool()
-pool.wait(lambda: sys.exit(0))
-#pool= multiprocessing.Pool(processes=8)
-#manager= multiprocessing.Manager()
-#processed_fnames= manager.list(processed_fnames)
-print("Starting pool")
 fnames= list(fnames)
-results= pool.map(open_file,
+print("Starting pool")
+if MPI:
+	pool= MPIPool()
+	pool.wait(lambda: sys.exit(0))
+	results= pool.map(open_file,
                   fnames,
                   callback=sum_output_stats)
-pool.close()
+	pool.close()
+else:
+	pool= multiprocessing.Pool(processes=12)
+	#manager= multiprocessing.Manager()
+	#processed_fnames= manager.list(processed_fnames)
+	results= pool.map_async(open_file,
+					fnames,
+					callback=sum_output_stats)
+	results.wait()
+	pool.close()
+	pool.join()
 print("Pool closed")
 pickle_globals(CACHE_FNAME)
 print_stats(N, table, total_sim_time_sec,
