@@ -181,7 +181,7 @@ def _open_file_exception(fname):
                    "Ns_dict": Ns_dict,
                    "counts_dict":counts_dict,
                    "status":0}
-    print(file_summary)
+#    print(file_summary)
     print("Opened {}".format(fname))
     assert(is_picklable(file_summary))
 #    np.random.RandomState([ord(c) for c in fname])
