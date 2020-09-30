@@ -158,7 +158,7 @@ def _open_file_exception(fname):
         sim_time_sec= end_sim_time_sec-max(start_sim_time_sec,STATS_FROM_SEC)
     if sim_time_sec<0:
         print("SKIP negative normalized sim-time {} stats from sec {}" \
-              .fomrat(sim_time_sec, STATS_FROM_SEC))
+              .format(sim_time_sec, STATS_FROM_SEC))
         ret_value= {"fname":fname,"status":-1}
         assert(is_picklable(ret_value))
         return ret_value
