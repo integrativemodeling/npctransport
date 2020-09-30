@@ -52,6 +52,9 @@ def pickle_globals(cache_fname):
     global processed_fnames
     global STATS_FROM_SEC
     print("UPDATING CACHE with {:} processed files".format(len(processed_fnames)))
+    for floater_type in N.keys():
+        if floater_type not in table:
+            table[floater_type]= 0.0 # make sure all table entires are initialized, in case they weren't in old caches
     with open(cache_fname,'wb') as f:
         pickle.dump([ N,
                       table,
@@ -172,12 +175,13 @@ def _open_file_exception(fname):
             t_sec= t_ns*1e-9
             if t_sec>STATS_FROM_SEC:
                 count= count+1.0
-                counts_dict[floater_s.type]= count
+        counts_dict[floater_s.type]= count
     file_summary= {"fname":fname,
                    "sim_time_sec":sim_time_sec,
                    "Ns_dict": Ns_dict,
                    "counts_dict":counts_dict,
                    "status":0}
+    print(file_summary)
     print("Opened {}".format(fname))
     assert(is_picklable(file_summary))
 #    np.random.RandomState([ord(c) for c in fname])
