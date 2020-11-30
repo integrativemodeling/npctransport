@@ -803,7 +803,7 @@ def add_kaps_and_inerts(config,
     np_inerts_radii= np.array(list(inerts_radii))
     print("Inerts_radii {}".format(np_inerts_radii))
     print("Number of large cargos is {}".format(len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])))
-    SPECIAL_HACK= True and (len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])>0) # activate if at least one cargo
+    SPECIAL_HACK= False and (len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])>0) # activate if at least one cargo
     print("SPECIAL HACK for large cargos = {}".format(SPECIAL_HACK))
     for radius in kaps_radii:
         kap_name="kap%d" % radius
