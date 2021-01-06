@@ -94,6 +94,10 @@ def unpickle_or_initialize_globals(cache_fname):
         processed_fnames= set()
 
 def accumulate(dictionary, key, value):
+    '''
+    add value to dictionary[key] if key existsm otherwise add it and
+    set it to value
+    '''
     if key in dictionary:
         dictionary[key]= dictionary[key] + value
     else:
@@ -104,6 +108,23 @@ def get_output_num(fname):
     if m is None:
         raise ValueError('cannot parse %s' % fname)
     return int(m.groups(0)[0])
+
+def get_poisson_interval(k, alpha=0.05):
+    """
+    uses chisquared info to get the 1-alpha poisson confidence
+    interval for the rate of an event per time period given k observed
+    events over that time period
+
+    :param k: rate (time^-1) for which interval is computed
+    :param alpha: one minus the confidence interval
+    :return: a numpy array with low and high interval boundaries
+    """
+    a = alpha
+    low, high = (stats.chi2.ppf(a/2, 2*k) / 2,
+                 stats.chi2.ppf(1-a/2, 2*k + 2) / 2)
+    if k == 0:
+        low = 0.0
+    return np.array([low, high])
 
 # returns number of sems for symmetric confidence intravel conf_interval
 def get_sems_for_conf(conf_interval):
@@ -122,19 +143,28 @@ def print_stats(N,
     rows= []
     keys= sorted(table.keys())
     for key in keys:
-        #    mean_per_sec=table[key]/n/sim_time_sec;
-        mean= table[key]/total_sim_time_sec
-        sem= math.sqrt(mean/total_sim_time_sec/N[key])
-        print(key +
-              '{:8.1f} +- {:8.2f} /sec/particle (confidence {:.0f}%);   time for all particles={:.3f} [sec]'.format\
-              (mean,
-               get_sems_for_conf(CONF)*sem,
+        # Compute transport events per particle per second:
+        n_per_particle= table[key]
+        n_per_particle_per_sec= n_per_particle / total_sim_time_sec # per particle per second
+        # Compute confidenc intervanee for transport events per particle per second:
+        n_particles= N[key]
+        n= n_per_particle * n_particles # total number of events observed
+        n_per_particle_per_sec_interval= get_poisson_interval(n, 1.0 - CONF) \
+            / total_sim_time_sec / n_particles
+        sem= math.sqrt(n_per_particle_per_sec/total_sim_time_sec/n_particles) # for backward comp.
+        print(
+              '{:15s} {:7.1f} -> {:8.1f} <- {:<7.1f} /sec/particle (confidence {:.0f}%);   time for all particles={:.3f} [sec]'.format\
+              (key,
+               n_per_particle_per_sec_interval[0],
+               n_per_particle_per_sec,
+               n_per_particle_per_sec_interval[1],
+#               get_sems_for_conf(CONF)*sem,
                CONF*100,
-               total_sim_time_sec*N[key]))
+               total_sim_time_sec*n_particles))
         rows.append({'type':key,
-                     'time_sec_mean':mean,
+                     'time_sec_mean': n_per_particle_per_sec,
                      'time_sec_sem':sem,
-                     'total_sim_time_sec':total_sim_time_sec*N[key]
+                     'total_sim_time_sec':total_sim_time_sec * n_particles
                      })
     df=pd.DataFrame(rows)
     df.to_csv(output_filename,
@@ -218,6 +248,7 @@ def _sum_output_stats_exception(file_summary):
         else:
             N[floater_type]= floater_N
     for floater_type, count in file_summary["counts_dict"].items():
+        # add number of transport events per particle of type floater_type
         accumulate(table, floater_type, count/N[floater_type])
         n= n+1
     if(len(processed_fnames) % 10 == 0):
@@ -262,7 +293,7 @@ if MPI:
                       callback=sum_output_stats)
     pool.close()
 else:
-    pool= multiprocessing.Pool(processes=40)
+    pool= multiprocessing.Pool(processes=30)
     #manager= multiprocessing.Manager()
     #processed_fnames= manager.list(processed_fnames)
     results= pool.map_async(open_file,
