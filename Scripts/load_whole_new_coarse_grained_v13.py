@@ -78,8 +78,8 @@ def parse_commandline():
     parser.add_argument('--n_diffusers', type=int,
                         default=200,
                         help='number of diffuser molecules for each type of diffuser')
-    parser.add_argument('--n_kap_interaction_sites', type=int,
-                        default=4,
+    parser.add_argument('--n_kap_interaction_sites', type=int, nargs='+',
+                        default=[4],
                         help='number of interaction sites on kaps')
     parser.add_argument('--box_size', type=float,
                         default=2000,
@@ -790,7 +790,8 @@ def add_kaps_and_inerts(config,
                         kaps_radii,
                         inerts_radii,
                         kap_interaction_sites,
-                        fg_regions_to_params):
+                        fg_regions_to_params,
+                        type_suffix=""):
     '''
     For each radius in the list diffusers_radii, add
     n_diffusers x kaps and n_diffusers x inerts to config,
@@ -806,7 +807,7 @@ def add_kaps_and_inerts(config,
     SPECIAL_HACK= False and (len(np_inerts_radii[np_inerts_radii>=MIN_CARGO_R])>0) # activate if at least one cargo
     print("SPECIAL HACK for large cargos = {}".format(SPECIAL_HACK))
     for radius in kaps_radii:
-        kap_name="kap%d" % radius
+        kap_name="kap{:g}{:}".format(radius, type_suffix)
         kaps[radius]= IMP.npctransport.add_float_type(config,
                                                       number=args.n_diffusers,
                                                       radius=radius,
@@ -838,7 +839,7 @@ def add_kaps_and_inerts(config,
                         for site_id in my_util.range_inclusive(1, kap_interaction_sites):
                             interaction.active_sites1.append(site_id)
     for radius in inerts_radii:
-        inert_name="inert%d" % radius
+        inert_name="inert{:g}{:}".format(radius, type_suffix)
         nonspecifics[radius]= IMP.npctransport.add_float_type(config,
                                                               number=n_diffusers,
                                                               radius=radius,
@@ -925,12 +926,18 @@ for fg0, regions_to_params0 in fgs_regions_to_params.items():
 if not args.only_nup:
     kaps_radii= set(args.diffusers_radii) - set(args.no_kaps_radii)
     inerts_radii= set(args.diffusers_radii) - set(args.no_inerts_radii)
-    add_kaps_and_inerts(config,
-                        args.n_diffusers,
-                        kaps_radii,
-                        inerts_radii,
-                        args.n_kap_interaction_sites,
-                        fgs_regions_to_params)
+    for n_kap_interaction_sites_current in args.n_kap_interaction_sites:
+        if len(args.n_kap_interaction_sites)>1:
+            type_suffix= "_" + str(n_kap_interaction_sites_current) + "sites"
+        else:
+            type_suffix= None
+        add_kaps_and_inerts(config,
+                            args.n_diffusers,
+                            kaps_radii,
+                            inerts_radii,
+                            n_kap_interaction_sites_current,
+                            fgs_regions_to_params,
+                            type_suffix= type_suffix)
 
 
 # dump to file
