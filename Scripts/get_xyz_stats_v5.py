@@ -32,8 +32,8 @@ if SCHWIMMBAD_OK:
         print("MPI is off (not activated as mpi)")
 
 
-#IS_SKIP_FGS= False
-IS_SKIP_FGS= True
+IS_SKIP_FGS= False
+#IS_SKIP_FGS= True
 N=1
 DISABLE_RANDOM=True or (N==1)
 
@@ -212,7 +212,7 @@ def get_input_fnames_set_from_prefixes(input_prefixes):
 if __name__ == '__main__':
     if IS_SKIP_FGS:
         print("Skipping FGs")
-    
+
     if SCHWIMMBAD_OK:
         args= get_cmdline_args()
         if(args.mpi):
