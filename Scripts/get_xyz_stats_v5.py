@@ -13,6 +13,7 @@ import numpy as np
 import os
 import os.path
 import random
+import re
 import sys
 try:
     import schwimmbad
@@ -20,16 +21,18 @@ try:
 except ImportError:
     SCHWIMMBAD_OK=False
 MPI_OK=False
-if SCHWIMMBAD_OK:
+
+def load_mpi():
     try:
         import schwimmbad.mpi
         schwimmbad.mpi.MPIPool()
-        MPI_OK=True
         print("MPI is on")
+        return True
     except ImportError:
         print("MPI is off (no MPI module available)")
     except ValueError as e:
         print("MPI is off (not activated as mpi)")
+    return False
 
 
 IS_SKIP_FGS= False
@@ -40,6 +43,11 @@ DISABLE_RANDOM=True or (N==1)
 # TODO: add stats time to pickle and to do_stats(), though will invalidate old caches
 
 def do_stats(N,S):
+    ''' 
+    Print .txt stats file for all molecule/domain types
+    @param N number of independent cross validations (usually 1, see N and DISABLE_RANDOM)
+    @param S a dictionary from molecule/domain type to a 3D array of XYZ coordinates
+    '''
     #    print("TOTAL STATS TIME [sec]: ", stats_time_ns*1E-9)
     if not os.path.isdir("Output"):
         assert(not os.path.exists("Output"))
@@ -48,7 +56,6 @@ def do_stats(N,S):
     for i in range(N):
         for f_type,XYZ in S[i].items():
             fname="Output/S{:d}.{:s}.txt".format(i, f_type)
-#            print ("Fname {}".format(fname))
             with open(fname,'w') as F:
                 for YZ in XYZ:
                     for Z in YZ:
@@ -79,6 +86,14 @@ def handle_file(fname):
     '''
     global IS_SKIP_FGS
     print("Handling {0}".format(fname))
+    if(True): # DEBUG
+        m = re.search("N(\d+)\/.*output(\d+).pb", fname) # DEBUG
+        checkpoint_suffix = f"{m.group(1)}_{m.group(2)}.txt" if (m is not None) \
+            else f"ran{random.randint(1,10000)}.txt" #DEBUG
+        if m is None or int(m.group(2))%100==0:            
+            print("Checkpoint {}".format(fname)) # DEBUG
+            with open(f"Output/checkpoint_{checkpoint_suffix}", 'w') as F: # DEBUG
+                print(f"checkpoint {fname}", file=F) #DEBUG
     try:
         F= RMF.HDF5.open_file(fname)
         if not IS_SKIP_FGS:
@@ -102,7 +117,7 @@ def handle_file(fname):
     print("Done handling {0}".format(fname))
     return (xyzs, fname)
 
-def _sum_xyzs_exception(xyzs_and_fname):
+def _sum_xyzs(xyzs_and_fname):
 #    print("Processing datasets returned by handle_file()")
     global N
     global S
@@ -110,13 +125,12 @@ def _sum_xyzs_exception(xyzs_and_fname):
     global processed_fnames # a set
     global CACHE_FNAME
     global MPI_ON
-    print("_sum_xyzs_exception")
+    print("_sum_xyzs()")
     if xyzs_and_fname is None:
         print("Empty xyzs skipped")
         return
     xyzs, fname= xyzs_and_fname
-    cache_frequency=250
-#    print("Checkpoint 1 in {}".format(fname))
+    cache_frequency=1000
     for i in range(N):
         for type_name,xyz in xyzs.items():
             if(random.random()<0.9 or DISABLE_RANDOM):
@@ -133,7 +147,7 @@ def _sum_xyzs_exception(xyzs_and_fname):
 #    print("Checkpoint 2 in {}".format(fname))
     processed_fnames.add(fname)
 #    print("Checkpoint 3 in {}".format(fname))
-#    print("Number of files processed {0:d}".format(len(processed_fnames)))
+    print("Number of files processed {0:d}".format(len(processed_fnames)))
     if(len(processed_fnames) % cache_frequency == 0):
         do_stats(N,S)
         if CACHE_FNAME is not None:
@@ -143,10 +157,10 @@ def _sum_xyzs_exception(xyzs_and_fname):
     xyzs.clear() # Clear memory since no more use for xyzs - otherwise pool.map is trying to return it
     print("Done summarizing {} statistics".format(fname))
 
-def sum_xyzs(xyzs_and_file):
+def sum_xyzs_no_exception(xyzs_and_file):
     # Do not add any exceptions to this function - to prevent hung processes
     try:
-        _sum_xyzs_exception(xyzs_and_file)
+        _sum_xyzs(xyzs_and_file)
     except:
         if xyzs_and_file is not None:
             print("Exception summarizing stats of {0}".format(xyzs_and_file[1]))
@@ -159,15 +173,18 @@ def get_cmdline_args():
                         help='List of prefixes of input hdf5 file from NPC simulations')
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--ncores", dest="n_cores", default=1,
-                       type=int, help="Number of processes (uses multiprocessing).")
+                       type=int, help="Number of processes (not using mpi).")
     group.add_argument("--mpi", dest="mpi", default=MPI_OK,
                        action="store_true", help="Run with MPI (default is false, unless using mpirun/exec with schimmbad module installed, which forces it to be true")
+    parser.add_argument("--no-schwimmbad", dest="is_schwimmbad", action='store_false', 
+                        help="Use multiprocesing instead of schwimmbad even if the latter is available (means no mpi)")
+    parser.set_defaults(is_schwimmbad= SCHWIMMBAD_OK)
     args = parser.parse_args()
     return args
 
 
 def run_schwimmbad_pool(filenames, is_mpi, n_processes):
-    print("Running with Scwimmbad pool")
+    print("Running with Schwimmbad pool")
     pool= schwimmbad.choose_pool(mpi =is_mpi,
                                  processes= n_processes)
     #    pool= schwimmbad.mpi.MPIPool()
@@ -175,7 +192,7 @@ def run_schwimmbad_pool(filenames, is_mpi, n_processes):
     #       pool.wait(lambda: sys.exit(0))
     results= pool.map(handle_file,
                       filenames,
-                      callback=sum_xyzs)
+                      callback=sum_xyzs_no_exception)
     pool.close()
     return results
 
@@ -189,7 +206,7 @@ def run_multiprocessing_pool(filenames, n_processes):
                 print("Processing", fname)
                 res= pool.apply_async(handle_file,
                                       args=(fname,), #, processed_fnames_managed),
-                                 callback=sum_xyzs)
+                                      callback=sum_xyzs_no_exception)
                 R.append(res)
             except:
                 print("Failed on {0}".format(fname))
@@ -212,16 +229,15 @@ def get_input_fnames_set_from_prefixes(input_prefixes):
 if __name__ == '__main__':
     if IS_SKIP_FGS:
         print("Skipping FGs")
-
-    if SCHWIMMBAD_OK:
-        args= get_cmdline_args()
+    args= get_cmdline_args()
+    if args.is_schwimmbad:
         if(args.mpi):
+            MPI_OK = load_mpi()
             assert(MPI_OK)
             #    CACHE_FNAME= None
-        input_prefixes= args.input_prefixes
-    else:
-        input_prefixes= sys.argv[1:]
+    input_prefixes= args.input_prefixes
     CACHE_FNAME='Output/CACHE.get_float_stats_{}.p'.format('__'.join(input_prefixes).replace('/','_'))
+    print(f"Cache file: {CACHE_FNAME}")
     fnames= get_input_fnames_set_from_prefixes(input_prefixes)
     print("Processing {} files with prefixes: {}".format(len(fnames),
                                                          ", ".join(input_prefixes)))
@@ -249,7 +265,7 @@ if __name__ == '__main__':
     print(fnames)
 #    for fname in fnames:
 #        handle_file(fname)
-    if SCHWIMMBAD_OK:
+    if args.is_schwimmbad:
         print("Schwimmbad:")
         results= run_schwimmbad_pool(fnames,
                                      is_mpi= args.mpi,
@@ -257,7 +273,7 @@ if __name__ == '__main__':
     else:
         print("Multiprocessing:")
         results= run_multiprocessing_pool(fnames,
-                                          n_processes= 8)
+                                          n_processes= args.n_cores)
     do_stats(N,S)
     if CACHE_FNAME is not None:
         print("UPDATING CACHE")
