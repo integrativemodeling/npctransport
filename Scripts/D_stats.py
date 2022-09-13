@@ -5,12 +5,12 @@ import glob
 import re
 import math
 import scipy.stats as stats
-import cPickle as pickle
+import pickle
 
 CACHE_FNAME='TMP.d_stats.%s.%s.p' % (sys.argv[1], sys.argv[2])
 # confidence interval required
 CONF_INTERVAL=0.95
-print sys.argv
+print(sys.argv)
 STATS_FROM_SEC=float(sys.argv[2]) # start stats after specified seconds
 
 def accumulate(dictionary, key, value):
@@ -32,7 +32,7 @@ def get_sems_for_conf(conf_interval):
 
 def print_stats(table, total_sim_time_sec):
     # print transports per particle per second
-    print "Total simulation time: %.6f [sec]" % total_sim_time_sec
+    print("Total simulation time: {:.6f} [sec]".format(total_sim_time_sec))
     keys=sorted(table.keys())
     for key in keys:
         #    mean_per_sec=table[key]/n/sim_time_sec;
@@ -42,7 +42,7 @@ def print_stats(table, total_sim_time_sec):
         var=mean2-mean**2
         stddev=math.sqrt(var)
         conf=get_sems_for_conf(CONF_INTERVAL)*stddev/math.sqrt(n)
-        print key, '%8.2e +- %8.2e sec' % (mean, conf)
+        print('{:} {:8.2e} +- {:8.2e} sec'.format(key, mean, conf))
 
 ############# Main ############
 fnames=set(glob.glob(sys.argv[1]+"*.pb"))
@@ -56,16 +56,16 @@ try:
           ] = pickle.load(f)
     assert(fnames.issuperset(processed_fnames))
     assert(cached_stats_from_sec == STATS_FROM_SEC)
-    print "Cache: processed", len(processed_fnames), "files"
+    print("Cache: processed {:} files".format(len(processed_fnames)))
 except:
-    print "NOT USING CACHE"
+    print("NOT USING CACHE")
     table={}
     n=0
     total_sim_time_sec=0.0
     processed_fnames=set()
 #modulus = int(sys.argv[2])
 fnames=fnames.difference(processed_fnames)
-print "Processing", len(fnames), " files that are not present in cache"
+print("Processing", len(fnames), " files that are not present in cache")
 for fname in fnames:
     try:
         i = get_output_num(fname)
@@ -78,13 +78,13 @@ for fname in fnames:
         end_sim_time_sec= output.statistics.global_order_params[-1].time_ns*(1e-9)
         sim_time_sec = end_sim_time_sec-max(start_sim_time_sec,STATS_FROM_SEC)
     except ValueError as e:
-        print "EXCEPTION ", fname, e
+        print("EXCEPTION ", fname, e)
     except:
-        print "EXCEPTION ", fname
+        print("EXCEPTION ", fname)
         continue
     processed_fnames.add(fname)
     if sim_time_sec<0:
-        print "SKIP", fname, " ", sim_time_sec
+        print("SKIP", fname, " ", sim_time_sec)
         continue
     total_sim_time_sec= total_sim_time_sec+sim_time_sec
     for floater in output.statistics.floaters:
