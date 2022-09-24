@@ -8,7 +8,8 @@ import scipy.stats as stats
 import pickle
 import numpy as np
 
-CACHE_FNAME='TMP.d_stats.%s.%s.p' % (sys.argv[1], sys.argv[2])
+CACHE_FNAME='TMP.d_stats.{:s}.{:s}.p'.format(sys.argv[1].replace("/","_").replace(".",""), 
+                                             sys.argv[2])
 # confidence interval required
 CONF_INTERVAL=0.95
 print(sys.argv)
@@ -101,8 +102,8 @@ for fname in fnames:
             D=op.diffusion_coefficient
             I=op.interacting_fraction
 #            print(floater.type, dt, D, I)
-            accumulate(table, floater.type + "_D", D, dt)
-            accumulate(table, floater.type + "_I", I, dt)
+            accumulate(table, "D_" + floater.type, D, dt)
+            accumulate(table, "I_" + floater.type, I, dt)
             prev_time_ns = op.time_ns
     n=n+1
     #    total_sim_time_sec=total_sim_time_sec+output.assignment.simulation_time_ns*(1e-9)
@@ -117,4 +118,5 @@ for fname in fnames:
                       ]
                     , f)
 
+    print_stats(table, total_sim_time_sec)
 print_stats(table, total_sim_time_sec)
