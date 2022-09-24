@@ -8,10 +8,7 @@ import math
 import scipy.stats as stats
 import numpy as np
 import time
-if sys.version_info.major == 3:
-    import pickle
-else:
-    import cPickle as pickle
+import pickle
 import multiprocessing
 import os.path
 try:
@@ -171,7 +168,7 @@ def print_stats(N,
               index_label= "From " + STATS_FROM_SEC_STR)
 
 
-def _open_file_exception(fname):
+def _open_file(fname):
     global STATS_FROM_SEC
 
     print("Opening {}".format(fname))
@@ -219,7 +216,7 @@ def _open_file_exception(fname):
 #        raise ValueError("DEBUG exception " + fname)
     return file_summary
 
-def open_file(fname):
+def open_file_no_exception(fname):
     try:
         return _open_file_exception(fname)
     except Exception as e:
@@ -227,7 +224,7 @@ def open_file(fname):
         return {"fname":fname, "status":-1}
 
 
-def _sum_output_stats_exception(file_summary):
+def _sum_output_stats(file_summary):
     global N
     global table
     global n
@@ -257,7 +254,7 @@ def _sum_output_stats_exception(file_summary):
         if CACHE_FNAME is not None:
             pickle_globals(CACHE_FNAME)
 
-def sum_output_stats(file_summaries):
+def sum_output_stats_no_exception(file_summaries):
     if isinstance(file_summaries, dict):
         file_summaries= [file_summaries]
     for file_summary in file_summaries:
@@ -288,17 +285,17 @@ print("Starting pool")
 if MPI:
     pool= MPIPool()
     pool.wait(lambda: sys.exit(0))
-    results= pool.map(open_file,
+    results= pool.map(open_file_no_exception,
                       fnames,
-                      callback=sum_output_stats)
+                      callback=sum_output_stats_no_exception)
     pool.close()
 else:
-    pool= multiprocessing.Pool(processes=30)
+    pool= multiprocessing.Pool(processes=1)
     #manager= multiprocessing.Manager()
     #processed_fnames= manager.list(processed_fnames)
-    results= pool.map_async(open_file,
+    results= pool.map_async(open_file_no_exception,
                             fnames,
-                            callback=sum_output_stats)
+                            callback=sum_output_stats_no_exception)
     results.wait()
     pool.close()
     pool.join()
