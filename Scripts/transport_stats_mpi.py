@@ -218,7 +218,7 @@ def _open_file(fname):
 
 def open_file_no_exception(fname):
     try:
-        return _open_file_exception(fname)
+        return _open_file(fname)
     except Exception as e:
         print("Exception in file {} - {}".format(fname, e))
         return {"fname":fname, "status":-1}
@@ -259,16 +259,16 @@ def sum_output_stats_no_exception(file_summaries):
         file_summaries= [file_summaries]
     for file_summary in file_summaries:
         try:
-            _sum_output_stats_exception(file_summary)
+            _sum_output_stats(file_summary)
         except KeyboardInterrupt:
             print("Keyboard interruption caught")
             raise
-        except:
+        except Exception as e:
             if file_summary is not None:
-                print("Exception summarizing stats of {0}".format(file_summary["fname"]))
+                print("Exception summarizing stats of {0} '{1}'".format(file_summary["fname"], e))
 #                raise
             else:
-                print("Unknown exception in sum_output_stats()")
+                print("Unknown exception in sum_output_stats() '{0}'", e)
                 #        raise
 
 ############# Main ###########
