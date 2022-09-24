@@ -171,6 +171,8 @@ def get_cmdline_args():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('input_prefixes', metavar='input file prefixes', type=str, nargs='+',
                         help='List of prefixes of input hdf5 file from NPC simulations')
+    parser.add_argument('--cache_fname', default=None, type=str,
+                        help="A non-default cache pickle filename [default is implementation dependent]")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--ncores", dest="n_cores", default=1,
                        type=int, help="Number of processes (not using mpi).")
@@ -236,21 +238,24 @@ if __name__ == '__main__':
             assert(MPI_OK)
             #    CACHE_FNAME= None
     input_prefixes= args.input_prefixes
-    CACHE_FNAME='Output/CACHE.get_float_stats_{}.p'.format('__'.join(input_prefixes).replace('/','_'))
-    print(f"Cache file: {CACHE_FNAME}")
+    if args.cache_fname is None:
+        cache_fname='Output/CACHE.get_float_stats_{}.p'.format('__'.join(input_prefixes).replace('/','_'))
+    else:
+        cache_fname=args.cache_fname
+    print(f"Cache file: {cache_fname}")
     fnames= get_input_fnames_set_from_prefixes(input_prefixes)
     print("Processing {} files with prefixes: {}".format(len(fnames),
                                                          ", ".join(input_prefixes)))
     try:
-        #    with gzip.open(CACHE_FNAME+".gzip",'rb') as f:
-        if CACHE_FNAME is None:
+        #    with gzip.open(cache_fname+".gzip",'rb') as f:
+        if cache_fname is None:
             assert(False)
-        with open(CACHE_FNAME,'rb') as f:
+        with open(cache_fname,'rb') as f:
             [ n, S, processed_fnames ] = pickle.load(f)
             processed_fnames= set(processed_fnames)
             assert(fnames.issuperset(processed_fnames))
             assert(n==N)
-            print("Using cache file {} with {} pre-processed files".format(CACHE_FNAME,
+            print("Using cache file {} with {} pre-processed files".format(cache_fname,
                                                                            len(processed_fnames)))
     except AssertionError as e:
         print(e)
@@ -275,7 +280,7 @@ if __name__ == '__main__':
         results= run_multiprocessing_pool(fnames,
                                           n_processes= args.n_cores)
     do_stats(N,S)
-    if CACHE_FNAME is not None:
+    if cache_fname is not None:
         print("UPDATING CACHE")
-        with open(CACHE_FNAME,'wb') as f:
+        with open(cache_fname,'wb') as f:
             pickle.dump([ N, S, list(processed_fnames)], f)
