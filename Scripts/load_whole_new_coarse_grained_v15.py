@@ -278,7 +278,8 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
                    kap_k= 5.98, 
                    # sliding: for range 5.98 and 45 degrees, k=5.9 ~ 1.25 mM per site; 5.31 ~ 2.5 mM; 4.65 ~ 5 mM; 3.98 ~ 10 mM; 3.31 ~ 20 mM; 2.64 ~ 40 mM
                    # sliding: for range 5.5 and 45 degrees, k=5.98 ~ 40 mM per site see my_grid_params.py
-                   # non-sliding: for range 5.5, k=1.4486 ~ 40 mM per site
+                   # non-sliding: for range 5.5, k=1.4486 ~ 40 mM per site.
+                   #              However, an adjustment that really makes it comparable to the equivalent sliding is k=1.6856, which is formally 10 mM per site
                    kap_range= 5.5, # 4.95 originally
                    nonspec_k= 0.01,
                    nonspec_range= 5.00,
