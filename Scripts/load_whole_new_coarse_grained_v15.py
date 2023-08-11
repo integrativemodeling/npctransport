@@ -847,8 +847,8 @@ def add_kaps_and_inerts(config,
                           name1=kap_name,
                           interaction_k= params.kap_k,
                           interaction_range= params.kap_range,
-                          range_sigma0_deg= sigma0_deg_if_sliding if args.no_sliding else None,
-                          range_sigma1_deg= sigma1_deg_if_sliding if args.no_sliding else None)
+                          range_sigma0_deg= None if args.no_sliding else sigma0_deg_if_sliding ,
+                          range_sigma1_deg= None if args.no_sliding else sigma1_deg_if_sliding)
                     if(params.nonspec_k is not None):
                         interaction.nonspecific_k.lower= params.nonspec_k
                     if kap_name=="kap20" and SPECIAL_HACK:
@@ -946,7 +946,7 @@ if not args.only_nup:
         if len(args.n_kap_interaction_sites)>1:
             type_suffix= "_" + str(n_kap_interaction_sites_current) + "sites"
         else:
-            type_suffix= None
+            type_suffix= ""
         add_kaps_and_inerts(config,
                             args.n_diffusers,
                             kaps_radii,
