@@ -161,7 +161,11 @@ def print_stats(N,
         rows.append({'type':key,
                      'time_sec_mean': n_per_particle_per_sec,
                      'time_sec_sem':sem,
-                     'total_sim_time_sec':total_sim_time_sec * n_particles
+                     'total_sim_time_sec':total_sim_time_sec * n_particles,
+                     'n_per_particle_per_sec': n_per_particle_per_sec,
+                     'n_per_particle_per_sec_lbound': n_per_particle_per_sec_interval[0],
+                     'n_per_particle_per_sec_ubound': n_per_particle_per_sec_interval[1],
+                     'confidence_level': CONF,
                      })
     df=pd.DataFrame(rows)
     df.to_csv(output_filename,
