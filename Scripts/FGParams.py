@@ -40,3 +40,12 @@ class FGParams:
   def update(self, dictionary):
     for key, value in dictionary.items():
       setattr(self, key, value)
+      
+  def __str__(self):
+    ''' Returns a string representation of an FGParams object '''
+    return f"FGParams(res_from={self.res_from}, res_to={self.res_to},"  + \
+      f"\n\tself_k={self.self_k}, self_range={self.self_range},\n\tkap_k={self.kap_k}," + \
+      f" kap_range={self.kap_range},\n\tnonspec_k={self.nonspec_k}," + \
+      f" nonspec_range={self.nonspec_range},\n\tbackbone_k={self.backbone_k}," + \
+      f" backbone_tau={self.backbone_tau})"
+      
