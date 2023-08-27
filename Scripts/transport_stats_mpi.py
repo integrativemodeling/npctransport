@@ -7,10 +7,10 @@ import re
 import math
 import scipy.stats as stats
 import numpy as np
-import time
+import sys
 import pickle
 import multiprocessing
-import os.path
+
 try:
     from schwimmbad.mpi import MPIPool, MPI
     _tmp_pool = MPIPool()
@@ -19,21 +19,27 @@ except:
     MPI = False
 import pandas as pd
 
-print(sys.argv)
-OUTPUT_PREFIX= sys.argv[1]
-STATS_FROM_SEC_STR= sys.argv[2]# start stats after specified seconds
-# set number of processors to third argument, default=1:
-N_PROCESSORS= int(sys.argv[3]) if len(sys.argv)>3 else 1
-STATS_FROM_SEC= float(STATS_FROM_SEC_STR)
-IS_REPORT_CACHE= len(sys.argv)>3 and sys.argv[3]=='report_cache_only'
-CACHE_FNAME= 'TMP.transport_stats_cache.{}.{}.p'.format\
-    (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
-     STATS_FROM_SEC_STR)
-OUTPUT_FILENAME= 'STATS_{}_from_{}_seconds.csv'.format\
-    (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
-     STATS_FROM_SEC_STR)
-# confidence interval required
-CONF= 0.95
+def parse_args():
+    if sys.argv[1] in ['-h', '--help']:
+        print("Usage: <IMP> python transport_stats.py OUTPUT_PREFIX STATS_FROM_SEC [N_PROCESSORS or report_cache_only]")
+        print()
+        print("       OUTPUT_PREFIX: prefix of output .pb files to process")
+        print("       STATS_FROM_SEC: start stats after specified seconds of simulation")
+        print("       N_PROCESSORS: number of processors to use, default=1")
+        print("       report_cache_only: report stats from cache only")
+        print()
+        print("Example: transport_stats.py output/N3/output 5e-6 4")
+        print("      Process all output files in output/N3/output* from 5 microseconds using 4 CPUs")
+        print()
+        print("Example: transport_stats.py output/N3/output 5e-6 report_cache_only")
+        print("      Report stats from cache for output/N3/output* from 5 microseconds")
+        sys.exit()
+    print(sys.argv)
+    OUTPUT_PREFIX= sys.argv[1]
+    STATS_FROM_SEC_STR= sys.argv[2]# start stats after specified seconds
+    N_PROCESSORS= int(sys.argv[3]) if len(sys.argv)>3 else 1
+    IS_REPORT_CACHE= len(sys.argv)>3 and sys.argv[3]=='report_cache_only'
+    return OUTPUT_PREFIX, STATS_FROM_SEC_STR, N_PROCESSORS, IS_REPORT_CACHE
 
 def is_picklable(obj):
   ''' Return true if obj is picklable '''
@@ -146,7 +152,7 @@ def print_stats(N,
         # Compute transport events per particle per second:
         n_per_particle= table[key]
         n_per_particle_per_sec= n_per_particle / total_sim_time_sec # per particle per second
-        # Compute confidenc intervanee for transport events per particle per second:
+        # Compute confidence intervals for transport events per particle per second:
         n_particles= N[key]
         n= n_per_particle * n_particles # total number of events observed
         n_per_particle_per_sec_interval= get_poisson_interval(n, 1.0 - CONF) \
@@ -158,7 +164,6 @@ def print_stats(N,
                n_per_particle_per_sec_interval[0],
                n_per_particle_per_sec,
                n_per_particle_per_sec_interval[1],
-#               get_sems_for_conf(CONF)*sem,
                CONF*100,
                total_sim_time_sec*n_particles))
         rows.append({'type':key,
@@ -179,11 +184,6 @@ def _open_file(fname):
     global STATS_FROM_SEC
 
     print("Opening {}".format(fname))
-    is_loaded= False
-    is_ok= False
-    #        i = get_output_num(fname)
-    #    if (i % 7 <> modulus):
-    #        continue
     output= Output()
     with open(fname, "rb") as f:
         output= Output()
@@ -215,12 +215,8 @@ def _open_file(fname):
                    "Ns_dict": Ns_dict,
                    "counts_dict":counts_dict,
                    "status":0}
-#    print(file_summary)
     print("Opened {}".format(fname))
     assert(is_picklable(file_summary))
-#    np.random.RandomState([ord(c) for c in fname])
-#    if np.random.rand()<0.5:
-#        raise ValueError("DEBUG exception " + fname)
     return file_summary
 
 def open_file_no_exception(fname):
@@ -229,7 +225,6 @@ def open_file_no_exception(fname):
     except Exception as e:
         print("Exception in file {} - {}".format(fname, e))
         return {"fname":fname, "status":-1}
-
 
 def _sum_output_stats(file_summary):
     global N
@@ -273,41 +268,56 @@ def sum_output_stats_no_exception(file_summaries):
         except Exception as e:
             if file_summary is not None:
                 print("Exception summarizing stats of {0} '{1}'".format(file_summary["fname"], e))
-#                raise
             else:
                 print("Unknown exception in sum_output_stats() '{0}'", e)
-                #        raise
+                
+                
+def process_files(fnames, is_mpi, n_processors=1):
+    '''
+    process files in fnames in parallel using n_processors if is_mpi is False,
+    or the MPI protocol if is_mpi is True.
+    '''
+    print("Processing {:d} files that are not present in cache".format(len(fnames)))
+    fnames= list(fnames)
+    if is_mpi:
+        print("Starting an MPI pool")
+        pool= MPIPool()
+        pool.wait(lambda: sys.exit(0))
+        results= pool.map(open_file_no_exception,
+                        fnames,
+                        callback=sum_output_stats_no_exception)
+        pool.close()
+    else:
+        print(f"Starting a pool of {N_PROCESSORS} processors")
+        pool= multiprocessing.Pool(processes=N_PROCESSORS)
+        results= pool.map_async(open_file_no_exception,
+                                fnames,
+                                callback=sum_output_stats_no_exception)
+        results.wait()
+        pool.close()
+        pool.join()
+    print("Pool closed")
 
 ############# Main ###########
-fnames= set(glob.glob(OUTPUT_PREFIX+"*.pb"))
-unpickle_or_initialize_globals(CACHE_FNAME)
-if IS_REPORT_CACHE:
+if __name__ == '__main__':
+    OUTPUT_PREFIX, STATS_FROM_SEC_STR, N_PROCESSORS, IS_REPORT_CACHE= parse_args()
+    STATS_FROM_SEC= float(STATS_FROM_SEC_STR)
+    CACHE_FNAME= 'TMP.transport_stats_cache.{}.{}.p'.format\
+        (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
+        STATS_FROM_SEC_STR)
+    OUTPUT_FILENAME= 'STATS_{}_from_{}_seconds.csv'.format\
+        (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
+        STATS_FROM_SEC_STR)
+    CONF= 0.95 # confidence interval required
+    # Get going:
+    fnames= set(glob.glob(OUTPUT_PREFIX+"*.pb"))
+    unpickle_or_initialize_globals(CACHE_FNAME)
+    if IS_REPORT_CACHE:
+        print_stats(N, table, total_sim_time_sec,
+                    OUTPUT_FILENAME)
+        sys.exit()
+    fnames= fnames.difference(processed_fnames)
+    process_files(fnames, is_mpi=MPI, n_processors=N_PROCESSORS)
+    pickle_globals(CACHE_FNAME)
     print_stats(N, table, total_sim_time_sec,
                 OUTPUT_FILENAME)
-    sys.exit()
-fnames= fnames.difference(processed_fnames)
-print("Processing {:d} files that are not present in cache".format(len(fnames)))
-fnames= list(fnames)
-print("Starting pool")
-if MPI:
-    pool= MPIPool()
-    pool.wait(lambda: sys.exit(0))
-    results= pool.map(open_file_no_exception,
-                      fnames,
-                      callback=sum_output_stats_no_exception)
-    pool.close()
-else:
-    pool= multiprocessing.Pool(processes=N_PROCESSORS)
-    #manager= multiprocessing.Manager()
-    #processed_fnames= manager.list(processed_fnames)
-    results= pool.map_async(open_file_no_exception,
-                            fnames,
-                            callback=sum_output_stats_no_exception)
-    results.wait()
-    pool.close()
-    pool.join()
-    print("Pool joined")
-print("Pool closed")
-pickle_globals(CACHE_FNAME)
-print_stats(N, table, total_sim_time_sec,
-            OUTPUT_FILENAME)
