@@ -312,9 +312,9 @@ def get_fgs_regions_to_params(is_remove_gle1_and_nup42):
                     default_GLFG.update(value)
                     print(default_GLFG)
                 if key==u"default_disordered":
-                    print(default_disordered)
-                    default_disordered.update(value)
-                    print(default_disordered)
+                    print(default_disordered_fgp)
+                    default_disordered_fgp.update(value)
+                    print(default_disordered_fgp)
 
     fgs_regions_to_params['Nsp1']= {
         'N': default_GLFG.get_copy(1, 180),
