@@ -83,6 +83,13 @@ if __name__ == "__main__":
     print("Per-site KD for k 2.64 and range 5.5 with sliding")
     KD = compute_KD_from_k_r_and_quadratic_model(k=2.64, r=5.5, Q=gp_slide.QuadraticLogKDParams)
     print("Per-site KD = {:.3f} mM".format(KD/1e-3))
+   
+    print("kap_k for range 5.5 and per-site KD {:.3f} mM".format(KD/1e-3))
+    print("with no slidling")
+    kap_k = compute_k_from_r_KD_and_quadratic_model(r=5.5, KD_M=KD, Q=gp_noslide.QuadraticLogKDParams)
+    print("Kap_k: ", kap_k)
+    # There seems to be an adjustment needed for the no-slide model, so we divide by 4:
+    KD /= 4.0;
     print("kap_k for range 5.5 and per-site KD {:.3f} mM".format(KD/1e-3))
     print("with no slidling")
     kap_k = compute_k_from_r_KD_and_quadratic_model(r=5.5, KD_M=KD, Q=gp_noslide.QuadraticLogKDParams)
