@@ -20,7 +20,6 @@ i=$SGE_TASK_ID
 OUTPUT=output${i}N.pb
 MOVIE=movie${i}N.rmf
 RESTART_OUTPUT=`pwd -P`/Output/output$i.pb
-#SRC_FG=./outputN_from_Test_big5.pb
 PWD_ORIG=`pwd -P`
 FINAL_OUTFOLDER=$PWD_ORIG/Output/
 TMP_OUTFOLDER=`mktemp -d -p $FINAL_OUTFOLDER`
