@@ -13,17 +13,20 @@ import multiprocessing
 import os.path
 try:
     from schwimmbad.mpi import MPIPool, MPI
-    MPI=True
+    _tmp_pool = MPIPool()
+    MPI = True
 except:
-    MPI=False
+    MPI = False
 import pandas as pd
 
 print(sys.argv)
 OUTPUT_PREFIX= sys.argv[1]
 STATS_FROM_SEC_STR= sys.argv[2]# start stats after specified seconds
+# set number of processors to third argument, default=1:
+N_PROCESSORS= int(sys.argv[3]) if len(sys.argv)>3 else 1
 STATS_FROM_SEC= float(STATS_FROM_SEC_STR)
 IS_REPORT_CACHE= len(sys.argv)>3 and sys.argv[3]=='report_cache_only'
-CACHE_FNAME= 'TMP.transport_stats_cache.{}.{}.p' .format\
+CACHE_FNAME= 'TMP.transport_stats_cache.{}.{}.p'.format\
     (OUTPUT_PREFIX.replace("/","_").replace(".",""), \
      STATS_FROM_SEC_STR)
 OUTPUT_FILENAME= 'STATS_{}_from_{}_seconds.csv'.format\
@@ -242,7 +245,7 @@ def _sum_output_stats(file_summary):
         print("Empty or defect output file skipped {}".format(file_summary["fname"]))
         return
     processed_fnames.add(file_summary["fname"])
-    total_sim_time_sec= total_sim_time_sec+file_summary["sim_time_sec"]
+    total_sim_time_sec += file_summary["sim_time_sec"]
     for floater_type, floater_N in file_summary["Ns_dict"].items():
         if floater_type in N:
             assert(N[floater_type]==floater_N)
@@ -251,7 +254,7 @@ def _sum_output_stats(file_summary):
     for floater_type, count in file_summary["counts_dict"].items():
         # add number of transport events per particle of type floater_type
         accumulate(table, floater_type, count/N[floater_type])
-        n= n+1
+        n += 1
     if(len(processed_fnames) % 10 == 0):
         print("Number of files processed {0:d}".format(len(processed_fnames)))
     if(len(processed_fnames) % cache_frequency == 0):
@@ -294,7 +297,7 @@ if MPI:
                       callback=sum_output_stats_no_exception)
     pool.close()
 else:
-    pool= multiprocessing.Pool(processes=1)
+    pool= multiprocessing.Pool(processes=N_PROCESSORS)
     #manager= multiprocessing.Manager()
     #processed_fnames= manager.list(processed_fnames)
     results= pool.map_async(open_file_no_exception,
