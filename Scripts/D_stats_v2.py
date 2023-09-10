@@ -14,12 +14,12 @@ CACHE_FNAME='TMP.d_stats.{:s}.{:s}.p'.format(sys.argv[1].replace("/","_").replac
 CONF_INTERVAL=0.95
 print(sys.argv)
 STATS_FROM_SEC=float(sys.argv[2]) # start stats after specified seconds
+STATS_FROM_NS=STATS_FROM_SEC*1e9
 
 def accumulate(dictionary, key, value, weight=1.0):
     entry=np.array([weight,value*weight,value**2*weight])
     if key in dictionary:
         dictionary[key] = dictionary[key] + entry
-#        print(key, dictionary[key])
     else:
         dictionary[key] = entry
 
@@ -49,7 +49,7 @@ def print_stats(table, total_sim_time_sec):
         except:
             print("# Warning: Can't compute std-dev, probably always same value")
             conf=0.0
-        print('{:} {:8.2e} +- {:8.2e} sec'.format(key, mean, conf))
+        print('{:} {:8.3e} +- {:8.3e} sec'.format(key, mean, conf))
 
 ############# Main ############
 fnames=set(glob.glob(sys.argv[1]+"*.pb"))
@@ -64,6 +64,7 @@ try:
     assert(fnames.issuperset(processed_fnames))
     assert(cached_stats_from_sec == STATS_FROM_SEC)
     print("Cache: processed {:} files".format(len(processed_fnames)))
+    print_stats(table, total_sim_time_sec)
 except:
     print("NOT USING CACHE")
     table={}
@@ -95,19 +96,19 @@ for fname in fnames:
         continue
     total_sim_time_sec= total_sim_time_sec+sim_time_sec
     for floater in output.statistics.floaters:
-        prev_time_ns = max(start_sim_time_sec, STATS_FROM_SEC)
-        for op in floater.order_params:
+        prev_time_ns = start_sim_time_sec*1e9
+        for op in floater.order_params[1:]:
+            if prev_time_ns < STATS_FROM_NS:
+                prev_time_ns = op.time_ns
+                continue
             dt = op.time_ns - prev_time_ns
-        #        accumulate(table,floater.type,floater.avg_n_transports);
             D=op.diffusion_coefficient
             I=op.interacting_fraction
-#            print(floater.type, dt, D, I)
             accumulate(table, "D_" + floater.type, D, dt)
             accumulate(table, "I_" + floater.type, I, dt)
             prev_time_ns = op.time_ns
     n=n+1
-    #    total_sim_time_sec=total_sim_time_sec+output.assignment.simulation_time_ns*(1e-9)
-    if(n%40>0 or n==0):
+    if(n%10>0 or n==0):
         continue
     with open(CACHE_FNAME,'wb') as f:
         pickle.dump([ table,
