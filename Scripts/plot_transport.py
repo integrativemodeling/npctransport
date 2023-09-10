@@ -53,6 +53,11 @@ def load_transport_stats(path, box_side_A = 2000, NE_thickness_A = 300,
     df['is_kap'] = df['type'].str.startswith('kap')
     df['radius'] = df['type'].str.extract(r'(\d+)').astype(int)
     df['MW'] = (df['radius'] / 20)**3 * 27
+    if 'n_per_particle_per_sec' not in df.columns:
+        print("Warning: old STATS file format detected, assuming n_per_particle_per_sec is time_sec_mean")
+        df['n_per_particle_per_sec'] = df['time_sec_mean']
+        df['n_per_particle_per_sec_lbound'] = df['time_sec_mean'] - df['time_sec_sem']
+        df['n_per_particle_per_sec_ubound'] = df['time_sec_mean'] + df['time_sec_sem']
     df['n_per_sec_per_NPC_per_uM'] = \
         get_normalized_permeability(df['n_per_particle_per_sec'], 
                                     scale_factor=scale_factor)
@@ -125,9 +130,9 @@ def plot_permeability(ax, df, color, label,
         else:
             transform = ax.transAxes
         slope_dict[label] = r" $\propto " \
-                            + ('MW' if is_mw else 'R') \
+                            + ('MW' if is_mw else 'e') \
                             + "^{" \
-                            + (f"{fit[0]:.1f}" if is_mw else f"{fit[0]:.2f}")  \
+                            + (f"{fit[0]:.1f}" if is_mw else f"{fit[0]:.2f}R")  \
                             + r"}$"
         if is_slope_in_legend:
             label += slope_dict[label]
