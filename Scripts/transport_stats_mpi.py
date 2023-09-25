@@ -181,6 +181,18 @@ def print_stats(N,
 
 
 def _open_file(fname):
+    ''' 
+    handle an individual file
+    :return file_summary: a dictionary with file summary information
+        with fields:
+        "fname" - the file name being handled
+        "sim_time_sec" - how much simulation time was accumulated in the file
+        "Ns_dict" - a dictionary that maps the number of molecules of each type in the simulation
+        "counts_dict" - a dictionary that maps the number of transport events for each
+                        molecule type during the simulateion time
+        "status" - 0 if successful, -1 if not
+        
+    '''
     global STATS_FROM_SEC
 
     print("Opening {}".format(fname))
@@ -226,7 +238,11 @@ def open_file_no_exception(fname):
         print("Exception in file {} - {}".format(fname, e))
         return {"fname":fname, "status":-1}
 
-def _sum_output_stats(file_summary):
+def _sum_output_stats(file_summary, cache_frequency=100):
+    '''
+    Accumulate statistics from the run results stored in file_summary
+    :param cache_frequency: how often to cache results
+    '''
     global N
     global table
     global n
@@ -234,7 +250,6 @@ def _sum_output_stats(file_summary):
     global CACHE_FNAME
     global STATS_FROM_SEC
     global total_sim_time_sec
-    cache_frequency= 500
 
     if file_summary["status"]<0:
         print("Empty or defect output file skipped {}".format(file_summary["fname"]))
@@ -257,6 +272,10 @@ def _sum_output_stats(file_summary):
             pickle_globals(CACHE_FNAME)
 
 def sum_output_stats_no_exception(file_summaries):
+    ''' 
+    accumulate statistics from individual file summaries
+    :param file_summaries: a list of file summary outputs from _open_file()
+    '''
     if isinstance(file_summaries, dict):
         file_summaries= [file_summaries]
     for file_summary in file_summaries:
