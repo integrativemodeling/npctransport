@@ -201,7 +201,7 @@ def _open_file(fname):
         output= Output()
         fstring= f.read()
         output.ParseFromString(fstring)
-        print("Parsed {}".format(fname))
+ #       print("Parsed {}".format(fname))
         start_sim_time_sec= output.statistics.global_order_params[0].time_ns*(1e-9)
         end_sim_time_sec= output.statistics.global_order_params[-1].time_ns*(1e-9)
         sim_time_sec= end_sim_time_sec-max(start_sim_time_sec,STATS_FROM_SEC)
@@ -227,7 +227,7 @@ def _open_file(fname):
                    "Ns_dict": Ns_dict,
                    "counts_dict":counts_dict,
                    "status":0}
-    print("Opened {}".format(fname))
+    print("Statistics computed for {}".format(fname))
     assert(is_picklable(file_summary))
     return file_summary
 
@@ -238,7 +238,7 @@ def open_file_no_exception(fname):
         print("Exception in file {} - {}".format(fname, e))
         return {"fname":fname, "status":-1}
 
-def _sum_output_stats(file_summary, cache_frequency=100):
+def _sum_output_stats(file_summary, cache_frequency=250):
     '''
     Accumulate statistics from the run results stored in file_summary
     :param cache_frequency: how often to cache results
@@ -276,6 +276,7 @@ def sum_output_stats_no_exception(file_summaries):
     accumulate statistics from individual file summaries
     :param file_summaries: a list of file summary outputs from _open_file()
     '''
+    print(f"Callback handling {len(file_summaries)} file summaries")
     if isinstance(file_summaries, dict):
         file_summaries= [file_summaries]
     for file_summary in file_summaries:
@@ -311,7 +312,9 @@ def process_files(fnames, is_mpi, n_processors=1):
         pool= multiprocessing.Pool(processes=N_PROCESSORS)
         results= pool.map_async(open_file_no_exception,
                                 fnames,
-                                callback=sum_output_stats_no_exception)
+                                callback=sum_output_stats_no_exception,
+                                error_callback=lambda e: print("Error in process_files: {}".format(e)),
+                                chunksize=2)
         results.wait()
         pool.close()
         pool.join()
