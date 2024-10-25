@@ -25,7 +25,7 @@ import copy
 import json
 import math
 import numpy as np
-import pandas as pd
+#import pandas as pd
 import re
 import sys
 import my_util
@@ -189,7 +189,7 @@ def get_node_nup_and_range_by_name(node_name, parent_name, grandparent_name):
         identifier= node_name
     else:
         identifier= parent_name
-    result= re.search('^([A-Za-z0-9]*)\.*[0-9]*@*[0-9]*_([0-9]*)-([0-9]*)_(bead|pdb)',
+    result= re.search(r'^([A-Za-z0-9]*)\.*[0-9]*@*[0-9]*_([0-9]*)-([0-9]*)_(bead|pdb)',
                       identifier)
 #    print(identifier, node_name, parent_name)
 #    print result.groups()
