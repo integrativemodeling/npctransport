@@ -1,6 +1,8 @@
 # NPC simulations utility files
 
-See *User's Manual* in PDF format in this folder for more details.
+## User's manual
+
+A detailed *User's Manual* in PDF format is available in this folder.
 
 ## Reference
 
