@@ -1,8 +1,8 @@
 # NPC simulations utility files
 
-## User's manual
+## User's Manual and Tutorial
 
-A detailed *User's Manual* in PDF format is available in this folder.
+A detailed *User's Manual* in PDF format and a *Tutorial* in Jupyter Notebook format are available in this folder.
 
 ## Reference
 
