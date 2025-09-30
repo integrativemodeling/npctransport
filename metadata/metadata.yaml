@@ -1,0 +1,8 @@
+title: NPC transport simulations
+tags: [Brownian dynamics, Coarse-grained modeling, Nuclear pore complex, NPC, transport]
+pmid: In press
+accessions: []
+prereqs: [imp, python/scikit, python/matplotlib]
+test:
+    runtime: 1h
+    build: release
