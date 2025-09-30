@@ -1,20 +1,25 @@
 # NPC Simulations Utility Files and Datasets
 
-### User's Manual and Tutorial
+### User's Manual 
 
-A detailed *User's Manual* in PDF format and a *Tutorial* in Jupyter Notebook format are available in this folder.
+A detailed *User's Manual* in PDF format are available in this folder.
 
-### `Scripts/`
+### `scripts/`
 
 Utility scripts used for initiating and analyzing the simulation. See tutorial for details on how and when to use key scripts.
 
-### `Models/NPC2018/`
+### `tutorials/`
 
-Kim et al. 2018 model of the NPC scaffold used in this work 
+*Tutorial* in Jupyter Notebook format 
 
-### `Data/CryoET/`
+### `data/cryoET/`
 
 In situ cryo-electron tomography (cryoET) map of the NPC's central channel used for validation of simulated NPC morphology
+
+
+### `models/NPC2018/`
+
+Kim et al. 2018 model of the NPC scaffold used in this work (see also User's manual)
 
 ### Reference
 
