@@ -2,7 +2,7 @@
 
 ### User's Manual 
 
-A detailed *User's Manual* in PDF format are available in this folder.
+A detailed *User's Manual* in PDF format is available in this folder.
 
 ### `scripts/`
 
@@ -10,7 +10,11 @@ Utility scripts used for initiating and analyzing the simulation. See tutorial f
 
 ### `tutorials/`
 
-*Tutorial* in Jupyter Notebook format 
+*Tutorial* in Jupyter Notebook format for running a basic simulation in a simplified setting + basic analysis
+
+### `test/`
+
+Test script for running a basic simulation in a simplified setting + basic analysis
 
 ### `data/cryoET/`
 
