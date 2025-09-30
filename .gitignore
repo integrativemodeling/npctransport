@@ -3,3 +3,7 @@
 *#
 */tmp_output/
 tmp_output/
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
