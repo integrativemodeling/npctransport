@@ -25,6 +25,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import shutil
 
 
 def is_conda_python() -> bool:
@@ -40,6 +41,11 @@ def is_conda_python() -> bool:
 # if using conda installation, install the imp module, and then this would be <CONDA_ENV_FOLDER>/bin/ for the correct environment
 PYTHON_PREFIX = sys.prefix
 FG_SIMULATION_FOLDER = os.path.join(sys.prefix, "bin") if is_conda_python() else "<PATH/TO/FG/SIMULATION/BINARY>/bin"
+# Look in PATH if unspecified
+if FG_SIMULATION_FOLDER.startswith("<PATH"):
+    fg_path = shutil.which('fg_simulation')
+    if fg_path:
+        FG_SIMULATION_FOLDER = str(pathlib.Path(fg_path).parent)
 CONFIG_FILE_NAME = "config.pb"
 OUTPUT_FILE_NAME = "output.pb"
 MOVIE_FILE_NAME = "movie.rmf"
